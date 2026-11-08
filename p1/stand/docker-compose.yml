@@ -1,0 +1,18 @@
+# P1 stand — local only. Run: ./stand.sh up
+name: wolp-p1
+services:
+  nginx:
+    image: nginx:1.29-alpine
+    ports: ["443:443"]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./pki/out:/pki:ro
+    depends_on: [probe]
+  probe:
+    build: ./probe
+    environment:
+      WOLP_HOST: ${WOLP_HOST:-wolp.test}
+      DEVICE_CA_CERT: /pki/device-ca.pem
+      DEVICE_CA_KEY: /pki/device-ca.key
+    volumes:
+      - ./pki/out:/pki:ro

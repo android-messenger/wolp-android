@@ -1,0 +1,17 @@
+{
+  "name": "wolp-p1-prototype",
+  "private": true,
+  "version": "0.0.1",
+  "description": "S1 P1: Capacitor shell over remote messenger-ui (variant A) — checks P1-a..P1-i",
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0",
+    "typescript": "5.9.3"
+  }
+}
