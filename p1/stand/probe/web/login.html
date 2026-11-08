@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>P1 enroll login</title>
+<style>body{font:15px system-ui;margin:16px}button{font-size:16px;padding:10px 16px;margin:4px 0}pre{white-space:pre-wrap;background:#eee;padding:8px;font-size:12px}</style>
+</head><body>
+<h3>enroll — вход (имитация Kratos, SPA)</h3>
+<p>Кнопка ставит HttpOnly-cookie <code>ory_kratos_session</code> (Domain=родительский домен) и делает <code>history.pushState</code> без перезагрузки — как SPA-вход в messenger-ui (§3.1).</p>
+<button id="login">Войти</button> <button id="logout">Выйти</button>
+<pre id="out"></pre>
+<script>
+const out = (s) => (document.getElementById('out').textContent += s + '\n');
+out('origin=' + location.origin + ' document.cookie=' + JSON.stringify(document.cookie));
+// §5: plugin calls from enroll must be rejected. Record what the bridge does.
+try {
+  const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.P1Probe;
+  out('Capacitor on enroll: ' + !!window.Capacitor + ', P1Probe: ' + !!P);
+  if (P) P.info().then(r => out('!! plugin call from enroll ACCEPTED: ' + JSON.stringify(r)))
+                 .catch(e => out('plugin call from enroll rejected: ' + e.message));
+} catch (e) { out('plugin probe error ' + e); }
+document.getElementById('login').onclick = async () => {
+  const r = await fetch('/p1/login', { method: 'POST', credentials: 'include' });
+  out('login ' + r.status + '; document.cookie=' + JSON.stringify(document.cookie));
+  history.pushState({}, '', '/messenger-ui/chats'); // SPA transition, no onPageFinished
+  out('pushState -> ' + location.pathname);
+};
+document.getElementById('logout').onclick = async () => {
+  const r = await fetch('/p1/logout', { method: 'POST', credentials: 'include' });
+  out('logout ' + r.status);
+};
+</script>
+</body></html>

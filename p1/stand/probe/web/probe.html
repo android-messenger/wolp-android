@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>P1 probe</title>
+<style>
+body{font:14px system-ui;margin:0;padding:calc(env(safe-area-inset-top) + 8px) 12px 12px}
+button{font-size:14px;padding:8px 10px;margin:3px 2px}
+pre{white-space:pre-wrap;word-break:break-all;background:#eee;padding:6px;font-size:11px;max-height:45vh;overflow:auto}
+.ok{color:#080}.bad{color:#b00}
+</style>
+</head><body>
+<h3>app — P1 probe <span id="online"></span></h3>
+<div>
+  <button data-a="run">Прогон XHR/fetch/WS</button>
+  <button data-a="journal">Журнал стенда</button>
+  <button data-a="cookies">Cookie (натив)</button>
+  <button data-a="rotate">Сменить сертификат</button>
+  <button data-a="ping">Нативный ping</button>
+  <button data-a="callOn">Звонок: FGS+мик</button>
+  <button data-a="callOff">Звонок: стоп</button>
+  <button data-a="ticks">Разрывы таймера</button>
+  <button data-a="timings">Холодный старт</button>
+  <button data-a="iframe">iframe → плагин</button>
+  <button data-a="enroll">→ enroll</button>
+  <button data-a="ct">CT: no-sct.badssl.com</button>
+  <button data-a="clear">Очистить</button>
+</div>
+<div>WS: <span id="ws">—</span></div>
+<pre id="out"></pre>
+<script src="/messenger-ui/probe.js"></script>
+</body></html>

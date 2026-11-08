@@ -1,0 +1,10 @@
+# P1 stand: generated test PKI (private keys!)
+p1/stand/pki/out/
+# per-machine copy of the stand root CA
+p1/app/android/app/src/debug/res/raw/p1_test_root.pem
+node_modules/
+local.properties
+.gradle/
+build/
+.idea/
+*.iml

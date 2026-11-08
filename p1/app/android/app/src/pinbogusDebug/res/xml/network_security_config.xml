@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- P1-d: deliberately WRONG pin for app.<host>. Native requests must fail; WebView behaviour is the finding.
+     Domain is the default stand host; adjust if -Pp1Host is used. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/p1_test_root" />
+        </trust-anchors>
+    </base-config>
+    <domain-config>
+        <domain includeSubdomains="false">app.wolp.test</domain>
+        <pin-set>
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+        </pin-set>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/p1_test_root" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

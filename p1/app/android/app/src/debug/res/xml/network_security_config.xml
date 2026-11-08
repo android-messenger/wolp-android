@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG/P1 only: additionally trusts the P1 stand test root (p1/stand/pki/out/root.pem, copied by p1/tools/sync-ca.sh). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/p1_test_root" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
