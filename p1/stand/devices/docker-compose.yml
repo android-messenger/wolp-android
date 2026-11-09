@@ -1,0 +1,83 @@
+# Devices stand (S3 task 3 live check): nginx enroll host → KratosGate devices module
+# → device-signer (unix socket) + Kratos + PostgreSQL. Local only. Run: ./up.sh
+# KratosGate is built from the sibling checkout ../../../../gate (android-messenger/gate).
+name: wolp-devices-stand
+
+x-gate-build: &gate-build
+  context: ${GATE_DIR:-../../../../gate}
+  dockerfile_inline: |
+    FROM golang:1.26 AS build
+    WORKDIR /src
+    COPY go.mod go.sum ./
+    RUN --mount=type=cache,target=/go/pkg/mod go mod download
+    COPY . .
+    RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+        CGO_ENABLED=0 go build -trimpath -o /out/ids ./cmd/ids && \
+        CGO_ENABLED=0 go build -trimpath -o /out/device-signer ./cmd/device-signer
+    FROM gcr.io/distroless/static-debian12:nonroot
+    COPY --from=build /out/ids /out/device-signer /
+
+services:
+  db:
+    image: postgres:18
+    environment: { POSTGRES_USER: stand, POSTGRES_PASSWORD: stand, POSTGRES_DB: ids }
+    volumes:
+      - ./initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:ro
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U stand -d kratos"], interval: 2s, timeout: 3s, retries: 30 }
+    ports: ["127.0.0.1:55433:5432"]
+
+  kratos-migrate:
+    image: oryd/kratos:v1.3.0
+    command: migrate sql -e --yes
+    environment: { DSN: "postgres://stand:stand@db:5432/kratos?sslmode=disable" }
+    depends_on: { db: { condition: service_healthy } }
+    restart: on-failure
+
+  kratos:
+    image: oryd/kratos:v1.3.0
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    environment: { DSN: "postgres://stand:stand@db:5432/kratos?sslmode=disable" }
+    volumes: ["./kratos:/etc/config/kratos:ro"]
+    ports: ["127.0.0.1:4433:4433", "127.0.0.1:4434:4434"]
+    depends_on: { kratos-migrate: { condition: service_completed_successfully } }
+
+  device-signer:
+    build: *gate-build
+    image: wolp-stand-gate
+    entrypoint: ["/device-signer"]
+    user: "${STAND_UID:-1000}:${STAND_GID:-1000}"   # owns out/int.key (mode 0400 is enforced)
+    environment:
+      SIGNER_SOCKET: /run/device-signer/sock
+      SIGNER_KEY_FILE: /pki/int.key
+      SIGNER_CERT_FILE: /pki/int.pem
+    volumes: ["./out:/pki:ro", "./out/run:/run/device-signer"]
+
+  kratosgate:
+    image: wolp-stand-gate
+    entrypoint: ["/ids"]
+    user: "${STAND_UID:-1000}:${STAND_GID:-1000}"   # same uid as the signer socket
+    environment:
+      POSTGRES_DSN: postgres://stand:stand@db:5432/ids?sslmode=disable
+      KRATOS_ADMIN_URL: http://kratos:4434
+      KRATOS_ADMIN_TOKEN: stand
+      WEBHOOK_SECRET: stand-webhook-secret
+      LOG_LEVEL: info
+      DEVICES_ENABLED: "true"
+      DEVICES_DB_DSN: postgres://stand:stand@db:5432/ids?sslmode=disable
+      DEVICES_KRATOS_PUBLIC_URL: http://kratos:4433
+      DEVICES_ADMIN_AUTH: ${DEVICES_ADMIN_AUTH:-stand-admin-token-0123456789abcdef}
+      DEVICES_SIGNER_SOCKET: /run/device-signer/sock
+      # The sample app (debug key) stands in for org.wolpmessenger on the stand.
+      DEVICES_APP_PACKAGE: org.wolpmessenger.devicetrust.sample
+      DEVICES_APP_SIGNING_DIGESTS: ${APP_DIGEST:-743b5e2c229eadc3382e60739b162facf19c5b9d4f9c3b9323c4d0295fc39b46}
+    volumes: ["./out/run:/run/device-signer"]
+    ports: ["127.0.0.1:18091:8091"]   # admin API and /readyz from the host
+    depends_on: [db, kratos, device-signer]
+    restart: on-failure
+
+  nginx:
+    image: nginx:1.29-alpine
+    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro", "./out:/pki:ro"]
+    ports: ["127.0.0.1:9443:8443"]    # the phone reaches it through `adb reverse tcp:9443 tcp:9443` (8443 is often taken)
+    depends_on: [kratosgate]
+
