@@ -97,6 +97,13 @@ expect "whoami with bob's session" "$code/$(json 'd["session"]+"/"+d["deviceId"]
 code=$(app /v1/device/whoami)
 expect "whoami without a session" "$(json 'd["session"]' < "$T/b")" "none"
 
+echo "--- S1-3: web client location (/messenger-ui/, session-optional, static like production)"
+code=$(app /messenger-ui/)
+expect "probe page without a session" "$code/$(grep -c 'probe.js' "$T/b")" "200/1"
+expect "  X-Device-Renew on the document (S1 §4.2 sees it in the WebView)" "$(hdr X-Device-Renew)" "1"
+code=$(app /messenger-ui/probe.js -H "Cookie: $CB")
+expect "  another user's session does not matter there (USER_MISMATCH only on session paths)" "$code" "200"
+
 echo "--- S3-N2: identity headers"
 code=$(app /messenger/api/headers -H "Cookie: $CA" -H "X-Device-Id: FORGED" -H "X-Device-User: FORGED" -H "X-Client-Serial: FORGED" \
   -H "X-Client-Verify: FORGED" -H "X-User-Id: FORGED")
@@ -123,6 +130,8 @@ expect "new device accepted (and cached)" "$code/$(hdr X-Device-Renew)" "200/"
 curl -sf -H "Authorization: Bearer $TOKEN" -H 'X-Admin-Actor: stand' "$GW/admin/v1/devices/$DEV/revoke" -d '{"reason":"lost"}' >/dev/null
 code=$(app /messenger/api/chats -H "Cookie: $CA")
 expect "after admin revoke" "$code/$(hdr X-Device-Deny)" "403/DEVICE_REVOKED"
+code=$(app /messenger-ui/)
+expect "web client document after revoke (WebView → VERIFY, S1 §4.2)" "$code/$(hdr X-Device-Deny)" "403/DEVICE_REVOKED"
 code=$(app /v1/device/ping)
 expect "ping after revoke" "$code/$(hdr X-Device-Deny)" "403/DEVICE_REVOKED"
 

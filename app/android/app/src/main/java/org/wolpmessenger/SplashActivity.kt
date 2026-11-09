@@ -31,6 +31,7 @@ import org.wolpmessenger.ui.UnsupportedScreen
 import org.wolpmessenger.ui.UpdateScreen
 import org.wolpmessenger.ui.WaitScreen
 import org.wolpmessenger.ui.WebViewOutdatedScreen
+import org.wolpmessenger.ui.WrongUserScreen
 
 /**
  * Launcher and the S1 §3 order. app.<host> is never loaded from here: only [Screen.Messenger]
@@ -64,6 +65,7 @@ class SplashActivity : ComponentActivity() {
                 Screen.Login -> LoginScreen(::openLogin)
                 is Screen.Onboarding -> OnboardingScreen(s.reEnroll, enrollBusy, enrollMessage, ::enroll)
                 Screen.Messenger -> WaitScreen()
+                Screen.WrongUser -> WrongUserScreen(onLogin = { loginOpened = false; evaluate() }, onClose = { finishAndRemoveTask() })
             }
         }
         // every S2 state change re-runs the order (S1 §3: renewal, block, revocation)
@@ -74,8 +76,23 @@ class SplashActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun onStart() {
         super.onStart()
+        // MainActivity hands over with a reason when the order alone would not show the right screen
+        val reason = intent.getStringExtra(EXTRA_REASON)
+        if (reason != null) {
+            intent.removeExtra(EXTRA_REASON) // once: the next start runs the order again
+            when (reason) {
+                // the WebView failed TLS to our host; the order's pinned ping may well pass (S1 §4.3)
+                REASON_SERVER_UNVERIFIED -> return show(Screen.Offline(serverUnverified = true))
+                REASON_WRONG_USER -> return show(Screen.WrongUser)
+            }
+        }
         evaluate()
     }
 
@@ -114,6 +131,12 @@ class SplashActivity : ComponentActivity() {
         else if (BuildConfig.DEBUG) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         window.decorView.importantForAutofill =
             if (on) View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS else View.IMPORTANT_FOR_AUTOFILL_AUTO
+    }
+
+    companion object {
+        const val EXTRA_REASON = "org.wolpmessenger.REASON"
+        const val REASON_SERVER_UNVERIFIED = "server_unverified"
+        const val REASON_WRONG_USER = "wrong_user"
     }
 
     private fun enroll(password: CharArray) {
