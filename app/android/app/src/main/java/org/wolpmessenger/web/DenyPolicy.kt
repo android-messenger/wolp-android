@@ -17,6 +17,12 @@ enum class DenyAction {
      * S2 only verifies by a pinned ping (S2 §5.3); nothing is deleted on the header's word.
      */
     VERIFY,
+    /**
+     * 401 on the app document **without** `X-Device-Deny` (HANDOFF question 8): Oathkeeper rejected a
+     * Kratos session the gateway's check cache still held (`DEVICES_CHECK_CACHE_TTL`). The native side
+     * asks Kratos directly and goes to login only if the session is really gone.
+     */
+    CHECK_SESSION,
 }
 
 /** Pure mapping, JVM-tested (the header may come from a spoofed server: S1 §10 «Подмена сервера»). */
@@ -29,4 +35,8 @@ object DenyPolicy {
         GatewayCode.UPDATE_REQUIRED -> DenyAction.VERIFY
         else -> DenyAction.NONE
     }
+
+    /** An app.<host> error response with no `X-Device-Deny`: only a 401 on the document matters. */
+    fun forUnmarked(status: Int, mainFrame: Boolean): DenyAction =
+        if (status == 401 && mainFrame) DenyAction.CHECK_SESSION else DenyAction.NONE
 }

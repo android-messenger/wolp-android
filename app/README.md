@@ -43,10 +43,19 @@ export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME н�
 ## WebView (S1-3, S1 §4)
 | Где | Что |
 |---|---|
-| `WolpWebViewClient` | клиентский сертификат только для `app.<host>` (`proceed`, иначе `ignore()` → `ensureFresh()`, перезагрузка не чаще раза в 30 с только при `Active`); `X-Device-Deny` только с `app.<host>` → `web/DenyPolicy` (JVM-тесты); `onReceivedSslError` → `cancel()` и «не удалось проверить сервер»; `onRenderProcessGone` → `true` |
+| `WolpWebViewClient` | клиентский сертификат только для `app.<host>` (`proceed`, иначе `ignore()` → `ensureFresh()`, перезагрузка не чаще раза в 30 с только при `Active`); `X-Device-Deny` только с `app.<host>` → `web/DenyPolicy` (JVM-тесты); 401 на документе `app` **без** заголовка (окно кэша `check`, HANDOFF вопрос 8) → `CHECK_SESSION`: сессию спрашиваем у самого Kratos (`whoami` шлюза отвечает из того же кэша), нет — вход; `onReceivedSslError` → `cancel()` и «не удалось проверить сервер»; `onRenderProcessGone` → `true` |
 | `WolpWebChromeClient` | камера/микрофон — только `https://app.<host>` и только `AUDIO/VIDEO_CAPTURE`; выбор файлов — Capacitor |
 | `MainActivity` | `credentialsVersion` → `clearClientCertPreferences` (последнее обработанное значение — `SharedPreferences`); смена состояния S2 и возврат после > 5 мин в фоне → порядок §3 (`Messenger` — без перезагрузки, иначе `SplashActivity`); ping при `onResume` и раз в 5 мин; `USER_MISMATCH` → `checkSessionBinding` → выход из Kratos и экран «другой пользователь»; «Назад» — `history.back()`, в корне — в фон; VaultReset — скрипт `DOCUMENT_START` удаляет `e2ee-signal`/`e2ee-device`/`e2ee-plaintext` и подтверждает через `WebMessageListener` |
 | вставки | плагин Capacitor `SystemBars` (`insetsHandling: css`): `env(safe-area-inset-*)` при `viewport-fit=cover` на WebView ≥ 140, иначе переменные `--safe-area-inset-*` |
+
+## Плагины (S1-4, S1 §5)
+| Где | Что |
+|---|---|
+| `web/BridgeGuard` | заменяет `WebMessageListener` моста Capacitor (`androidBridge`) своим: только главный фрейм ровно `app.<host>` (`sourceOrigin`, `isMainFrame`), остальным — ответ `PERMISSION_DENIED` (промис отклоняется, а не висит, как было у Capacitor из iframe). Ставится из `load()` плагина — Capacitor вызывает его до загрузки `server.url`. Канал ответа Capacitor хранит в приватном поле `MessageHandler` — его и `Bridge.msgHandler` R8 не трогает (`proguard-rules.pro`); если поставить не удалось — плагины закрыты |
+| `web/BridgePolicy`, `CallOrigins` | правило origin (JVM-тесты) и запись origin каждого пропущенного вызова по `callbackId`: плагин в начале каждого метода берёт запись и сверяет сам; нет записи (мост ушёл на `JavascriptInterface`, вызов мимо защиты) — отказ |
+| `plugins/DeviceTrustPlugin` | `getState` (`{state, notAfter?}`), `getDeviceInfo` (`securityLevel` только если S2 знает его из предпроверки этого процесса; `deviceId` S2 наружу не отдаёт), `vaultWrap/Unwrap` — base64, назначения только `e2ee`/`e2ee-plaintext` (`web/JsDeviceTrust`, JVM-тесты); ошибки — `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `VAULT_KEY_GONE`, `VAULT_LOCKED`, `VAULT_CORRUPT`, `UNAVAILABLE`; входные и выходные байты затираются |
+
+В debug Capacitor пишет в logcat параметры вызовов (`methodData`), включая данные `vaultWrap` — `setLoggingEnabled` только для debug.
 
 ## CI
 `.github/workflows/app.yml`: debug-сборка и JVM-тесты, обе release-сборки одноразовым ключом, отрицательные проверки `verify*`, урезанная `libwolpdt.so`, нет корня стенда в release. Сабмодуль приватного `wolp-device-trust` забирается deploy-ключом (секрет `DEVICE_TRUST_DEPLOY_KEY`; в организации deploy-ключи должны быть разрешены) или fine-grained токеном с `Contents: read` на `wolp-device-trust` (секрет `DEVICE_TRUST_TOKEN`).

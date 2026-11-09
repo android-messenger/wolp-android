@@ -32,4 +32,11 @@ class DenyPolicyTest {
     ).forEach { both(it, DenyAction.NONE) }
 
     @Test fun `every code has a decision`() = GatewayCode.entries.forEach { DenyPolicy.forWebView(it, true) }
+
+    @Test fun `401 on the document without a header checks the Kratos session`() {
+        assertEquals(DenyAction.CHECK_SESSION, DenyPolicy.forUnmarked(401, mainFrame = true))
+        assertEquals(DenyAction.NONE, DenyPolicy.forUnmarked(401, mainFrame = false))
+        assertEquals(DenyAction.NONE, DenyPolicy.forUnmarked(403, mainFrame = true))
+        assertEquals(DenyAction.NONE, DenyPolicy.forUnmarked(500, mainFrame = true))
+    }
 }
