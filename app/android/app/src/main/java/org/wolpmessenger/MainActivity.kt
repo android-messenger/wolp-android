@@ -172,6 +172,23 @@ class MainActivity : BridgeActivity(), WebHost {
 
     override fun onServerUnverified() = leave(SplashActivity.REASON_SERVER_UNVERIFIED)
 
+    /**
+     * S1 §3.1 (v2.13): the web client logged out or lost its session and shows its own login page.
+     * No session in Kratos → §3 (LoginActivity), and the WebView forgets its client-certificate choice
+     * as on any logout (§4.1). Session still alive → back to the web client's start page.
+     */
+    override fun onWebLoginRoute() {
+        if (leaving) return
+        lifecycleScope.launch {
+            if (Gateway.hasSession()) {
+                bridge.webView.loadUrl(AppConfig.appUrl + AppConfig.START_PATH)
+            } else {
+                WebView.clearClientCertPreferences(null)
+                leave()
+            }
+        }
+    }
+
     override fun onRendererGone(view: WebView) {
         // the dead WebView must leave the hierarchy and be destroyed before anything touches it again
         (view.parent as? ViewGroup)?.removeView(view)
