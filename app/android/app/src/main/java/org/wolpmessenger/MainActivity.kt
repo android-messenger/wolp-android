@@ -26,6 +26,7 @@ import org.wolpmessenger.devicetrust.api.TrustState
 import org.wolpmessenger.launch.AndroidProbes
 import org.wolpmessenger.launch.LaunchGate
 import org.wolpmessenger.launch.Screen
+import org.wolpmessenger.plugins.DeviceTrustPlugin
 import org.wolpmessenger.web.DenyAction
 import org.wolpmessenger.web.WebData
 
@@ -57,6 +58,7 @@ class MainActivity : BridgeActivity(), WebHost {
             .setLoggingEnabled(BuildConfig.DEBUG)
             .create()
         secureWindow()
+        registerPlugin(DeviceTrustPlugin::class.java) // its load() installs the bridge guard (S1 §5)
         super.onCreate(savedInstanceState)
         // Installed synchronously after Bridge.create(): the first load's callbacks arrive later on the main looper.
         bridge.webViewClient = WolpWebViewClient(bridge, this)
@@ -145,6 +147,11 @@ class MainActivity : BridgeActivity(), WebHost {
             DenyAction.REFRESH -> lifecycleScope.launch { DeviceTrust.ensureFresh() } // a change re-runs §3
             DenyAction.VERIFY -> lifecycleScope.launch { DeviceTrust.onGatewayDenied(code, DenySource.WEBVIEW) }
             DenyAction.CHECK_BINDING -> lifecycleScope.launch { checkBinding() }
+            DenyAction.CHECK_SESSION -> lifecycleScope.launch {
+                // Kratos itself, not the gateway: its whoami answers from the same check cache
+                if (Gateway.hasSession()) Log.i(WolpApp.TAG, "401 without X-Device-Deny, but the Kratos session is alive")
+                else leave()
+            }
         }
     }
 
@@ -176,7 +183,7 @@ class MainActivity : BridgeActivity(), WebHost {
     private fun applyVaultReset() {
         Log.i(WolpApp.TAG, "vault reset: clearing ${WebData.E2EE_DATABASES} before the web app loads")
         val wv = bridge.webView
-        val origins = setOf(originOf(AppConfig.appUrl))
+        val origins = setOf(AppConfig.appOrigin)
         WebViewCompat.addWebMessageListener(wv, WebData.VAULT_RESET_LISTENER, origins) { _, message, _, isMainFrame, _ ->
             if (!isMainFrame || message.data != "done" || vaultResetScript == null) return@addWebMessageListener
             vaultResetScript?.remove()
@@ -194,7 +201,5 @@ class MainActivity : BridgeActivity(), WebHost {
         const val PING_INTERVAL_MS = 5 * 60_000L
         const val BACKGROUND_RECHECK_MS = 5 * 60_000L
         const val CERT_RELOAD_GAP_MS = 30_000L
-
-        fun originOf(url: String): String = android.net.Uri.parse(url).let { "${it.scheme}://${it.authority}" }
     }
 }

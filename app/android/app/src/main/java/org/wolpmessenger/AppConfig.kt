@@ -11,6 +11,9 @@ import org.wolpmessenger.devicetrust.api.RaspReaction
 object AppConfig {
     val enrollUrl: String = BuildConfig.ENROLL_URL
     val appUrl: String = BuildConfig.APP_URL
+
+    /** `scheme://host[:port]` of [appUrl]: the only origin allowed to call plugins (S1 §5). */
+    val appOrigin: String = originOf(appUrl)
     val serverPins: List<String> = BuildConfig.SERVER_PINS.split(',').filter { it.isNotEmpty() }
     val expectedSigningDigests: List<String> = BuildConfig.EXPECTED_SIGNING_DIGESTS.split(',').filter { it.isNotEmpty() }
     val buildKind: BuildKind = BuildKind.valueOf(BuildConfig.BUILD_KIND)
@@ -43,6 +46,8 @@ object AppConfig {
         val cm = CookieManager.getInstance()
         cm.getCookie(appUrl)?.takeIf { KRATOS_COOKIE in it } ?: cm.getCookie(enrollUrl)?.takeIf { KRATOS_COOKIE in it }
     }.getOrNull()
+
+    fun originOf(url: String): String = java.net.URI(url).let { "${it.scheme}://${it.rawAuthority}" }
 
     const val KRATOS_COOKIE = "ory_kratos_session"
 }

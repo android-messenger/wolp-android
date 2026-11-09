@@ -69,3 +69,13 @@ docker compose down -v                    # всё убрать (out/ остаё
 - **кэш `check` (`DEVICES_CHECK_CACHE_TTL`, 30 с) держит сессию Kratos после её удаления**: в этом окне запрос проходит `auth_request`, и 401 отдаёт уже Oathkeeper — **без `X-Device-Deny`**. Документ `app.<host>` тогда показывает JSON Oathkeeper, а не вход; после TTL — `NO_SESSION` как положено. В проде окно такое же (выход в другом месте, отзыв сессий админом);
 - `input.click()` на `<input type=file>` из CDP не открывает выбор файла (нужен жест) — для автоматизации касание по координатам элемента × `devicePixelRatio`;
 - первая загрузка страницы до применения вставок даёт `env(safe-area-inset-*) = 0`, затем Capacitor запрашивает вставки заново (`onPageCommitVisible`).
+
+## S1-4, 2026-11-09, Galaxy A37 (productDebug)
+
+Проба `stand-ui/app/` дополнена: кнопка «Все проверки» (`dtAll()`) прогоняет матрицу плагина `DeviceTrust` там, где страница открыта; на `app` — два iframe: того же origin и `enroll`; та же проба отдаётся на `enroll` (`/messenger-ui/`), кнопка «Открыть enroll» — переход главного фрейма. Результаты — в `#out` и в консоль (`PROBE DT …`).
+- `app`, главный фрейм — 14/14: `getState` (`ACTIVE`, `notAfter`), `getDeviceInfo` (`TEE`, `strongBox=false`, 36, `2026-08-05`), `wrap`→`unwrap` = исходные байты; `unwrap` как `e2ee-plaintext` и испорченный блоб → `VAULT_CORRUPT`; `names`/`push-key`/`E2EE`/без назначения/не base64 → `INVALID_ARGUMENT`;
+- iframe `app` → `PERMISSION_DENIED` на каждый вызов сразу (logcat `bridge guard: refused … mainFrame=false`);
+- iframe `enroll` и главный фрейм на `enroll` — нет ни `Capacitor`, ни `androidBridge`; «Назад» на `app` — плагин снова работает;
+- вопрос 8 HANDOFF: сессии Kratos удалены admin API → `fetch` в окне кэша `check` — `401` без `X-Device-Deny`; документ `/messenger/whoami` → `CHECK_SESSION` → Kratos сессии не видит → вход → `Messenger` (петли нет).
+
+nginx: `nginx.conf` смонтирован файлом — после правки (новый inode) `nginx -s reload` видит старый текст, нужен `docker compose up -d --force-recreate nginx`.

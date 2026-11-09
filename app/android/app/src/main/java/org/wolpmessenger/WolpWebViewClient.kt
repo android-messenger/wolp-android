@@ -58,7 +58,15 @@ class WolpWebViewClient(bridge: Bridge, private val host: WebHost) : BridgeWebVi
     override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
         super.onReceivedHttpError(view, request, errorResponse)
         if (!request.url.isSameOrigin(app)) return
-        val header = errorResponse.responseHeaders?.entries?.firstOrNull { it.key.equals(DENY_HEADER, ignoreCase = true) }?.value ?: return
+        val header = errorResponse.responseHeaders?.entries?.firstOrNull { it.key.equals(DENY_HEADER, ignoreCase = true) }?.value
+        if (header == null) {
+            val action = DenyPolicy.forUnmarked(errorResponse.statusCode, request.isForMainFrame)
+            if (action != DenyAction.NONE) {
+                Log.i(WolpApp.TAG, "webview ${errorResponse.statusCode} without $DENY_HEADER on the document → $action")
+                host.onDeny(GatewayCode.UNKNOWN, action)
+            }
+            return
+        }
         val code = GatewayCode.parse(header.trim())
         val action = DenyPolicy.forWebView(code, request.isForMainFrame)
         Log.i(WolpApp.TAG, "webview deny $code (${errorResponse.statusCode}, mainFrame=${request.isForMainFrame}) → $action")
