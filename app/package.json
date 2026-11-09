@@ -1,0 +1,10 @@
+{
+  "name": "wolp-android-app",
+  "private": true,
+  "version": "0.0.0",
+  "description": "S1: org.wolpmessenger — Capacitor shell; only the native bridge sources come from npm (no cap sync, config is built in code)",
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0"
+  }
+}

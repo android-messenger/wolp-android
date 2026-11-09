@@ -1,0 +1,105 @@
+# S1 app (app/): build, JVM tests, release build checks (S2 §7.3) with a throwaway key.
+# The S2 library is a submodule of a private repo, checked out at the SHA the submodule pins with
+# either a read-only deploy key (secret DEVICE_TRUST_DEPLOY_KEY; needs deploy keys allowed in the org)
+# or a fine-grained token with Contents: read on wolp-device-trust (secret DEVICE_TRUST_TOKEN).
+name: app
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/app.yml", ".gitmodules"]
+  pull_request:
+    paths: ["app/**", ".github/workflows/app.yml", ".gitmodules"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # CI has no real hosts: well-formed placeholders (validateWolpConfig, NSC generation). Passed as -P
+      # flags: ORG_GRADLE_PROJECT_wolp.* names (with dots) do not reach Gradle from the runner.
+      # The stand root: debug variants trust it, release variants must not (checked below).
+      WOLP: >-
+        -Pwolp.enrollUrl=https://enroll.ci.invalid
+        -Pwolp.appUrl=https://app.ci.invalid
+        -Pwolp.serverPins=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
+        -Pwolp.extraTrustAnchor=../../p1/stand/devices/pki/stand-root.pem
+    defaults:
+      run:
+        working-directory: app/android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pinned wolp-device-trust commit
+        id: dt
+        working-directory: .
+        run: echo "sha=$(git ls-tree HEAD app/android/third_party/wolp-device-trust | awk '{print $3}')" >> "$GITHUB_OUTPUT"
+
+      - name: access to wolp-device-trust (HTTP status only, the token is never printed)
+        working-directory: .
+        env:
+          T: ${{ secrets.DEVICE_TRUST_TOKEN }}
+        run: |
+          [ -z "$T" ] && { echo "DEVICE_TRUST_TOKEN not set — relying on DEVICE_TRUST_DEPLOY_KEY"; exit 0; }
+          # shape only (never the value): length, known prefix, stray whitespace
+          prefix=other; case $T in github_pat_*) prefix=github_pat_ ;; ghp_*) prefix=ghp_ ;; esac
+          ws=no; [[ "$T" =~ [[:space:]] ]] && ws=yes
+          echo "token shape: length ${#T}, prefix $prefix, whitespace $ws"
+          # 200 here + 401/404 below = the token is valid but not admitted to the org (owner, approval)
+          echo "GET /user → $(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T" https://api.github.com/user)"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T" https://api.github.com/repos/android-messenger/wolp-device-trust)
+          echo "GET repos/android-messenger/wolp-device-trust → $code"
+          case $code in
+            200) ;;
+            401) echo "::error::DEVICE_TRUST_TOKEN is invalid or expired (401)"; exit 1 ;;
+            403|404) echo "::error::DEVICE_TRUST_TOKEN has no access to wolp-device-trust ($code): resource owner must be android-messenger, the repository selected, Contents: read, and an org approval if required"; exit 1 ;;
+            *) echo "::error::unexpected $code"; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          repository: android-messenger/wolp-device-trust
+          ref: ${{ steps.dt.outputs.sha }}
+          path: app/android/third_party/wolp-device-trust
+          ssh-key: ${{ secrets.DEVICE_TRUST_DEPLOY_KEY }}
+          token: ${{ secrets.DEVICE_TRUST_TOKEN || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Capacitor native sources (npm)
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: debug build and unit tests
+        run: ./gradlew --no-daemon $WOLP :app:assembleProductDebug :app:testProductDebugUnitTest
+
+      - name: release builds (S2 §7.3) with a throwaway release key
+        run: |
+          keytool -genkeypair -keystore "$RUNNER_TEMP/release.p12" -storetype PKCS12 -storepass ci-pass -keypass ci-pass \
+            -alias wolp -keyalg EC -groupname secp256r1 -sigalg SHA256withECDSA -dname "CN=ci" -validity 30
+          DIGEST=$(keytool -exportcert -keystore "$RUNNER_TEMP/release.p12" -storepass ci-pass -alias wolp | sha256sum | cut -d' ' -f1)
+          SIGN="-Pwolp.signing.storeFile=$RUNNER_TEMP/release.p12 -Pwolp.signing.storePassword=ci-pass -Pwolp.signing.keyAlias=wolp -Pwolp.signing.keyPassword=ci-pass -Pwolp.expectedSigningDigests=$DIGEST"
+          ./gradlew --no-daemon $WOLP $SIGN :app:assembleProductRelease :app:assemblePilotRelease
+          # refused: product in the pilot versionCode range; signer not in expectedSigningDigests; stand host
+          if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.productVersionCode=10095 :app:verifyProductReleaseBuildKind; then
+            echo "verifyProductReleaseBuildKind accepted a pilot-range versionCode"; exit 1; fi
+          if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.expectedSigningDigests=$(printf '00%.0s' {1..32}) :app:verifyPilotReleaseBuildKind; then
+            echo "verifyPilotReleaseBuildKind accepted a foreign signer"; exit 1; fi
+          if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.appUrl=https://localhost:9444 :app:verifyProductReleaseBuildKind; then
+            echo "verifyProductReleaseBuildKind accepted the stand host"; exit 1; fi
+          for apk in app/build/outputs/apk/*/release/*.apk; do
+            # libwolpdt.so stripped by the app's NDK (API.md §1)
+            unzip -p "$apk" lib/arm64-v8a/libwolpdt.so > "$RUNNER_TEMP/libwolpdt.so"
+            file "$RUNNER_TEMP/libwolpdt.so" | tee /dev/stderr | grep -q ', stripped'
+          done
+          # no stand trust anchor outside debug (S1 §4.3); checked on the generated sources, as release
+          # resource paths are shortened in the APK
+          if ls app/build/generated/wolp-nsc/*Release/raw 2>/dev/null; then echo "release NSC carries an extra trust anchor"; exit 1; fi

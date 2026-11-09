@@ -1,0 +1,9 @@
+.gradle/
+build/
+local.properties
+.kotlin/
+.cxx/
+*.iml
+.idea/
+# per-machine stand configuration (tools/stand-config.sh)
+stand.properties
