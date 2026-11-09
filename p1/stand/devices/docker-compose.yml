@@ -1,5 +1,6 @@
-# Devices stand (S3 task 3 live check): nginx enroll host → KratosGate devices module
-# → device-signer (unix socket) + Kratos + PostgreSQL. Local only. Run: ./up.sh
+# Devices stand (S3 tasks 3–5): nginx enroll and app hosts → KratosGate devices module
+# → device-signer (unix socket) + Kratos + PostgreSQL; on the app host requests go
+# through auth_request and Oathkeeper to an echo backend. Local only. Run: ./up.sh
 # KratosGate is built from the sibling checkout ../../../../gate (android-messenger/gate).
 name: wolp-devices-stand
 
@@ -70,14 +71,28 @@ services:
       # The sample app (debug key) stands in for org.wolpmessenger on the stand.
       DEVICES_APP_PACKAGE: org.wolpmessenger.devicetrust.sample
       DEVICES_APP_SIGNING_DIGESTS: ${APP_DIGEST:-743b5e2c229eadc3382e60739b162facf19c5b9d4f9c3b9323c4d0295fc39b46}
+      DEVICES_INTERNAL_HMAC_SECRET: stand-internal-hmac-secret
+      # renew.sh: a short certificate life makes renewal due a minute after enrollment
+      DEVICES_CERT_TTL: ${STAND_CERT_TTL:-72h}
+      DEVICES_RENEW_BEFORE: ${STAND_RENEW_BEFORE:-48h}
     volumes: ["./out/run:/run/device-signer"]
     ports: ["127.0.0.1:18091:8091"]   # admin API and /readyz from the host
     depends_on: [db, kratos, device-signer]
     restart: on-failure
 
+  oathkeeper:
+    image: oryd/oathkeeper:v0.40.7
+    command: serve -c /etc/config/oathkeeper/oathkeeper.yml
+    volumes: ["./oathkeeper:/etc/config/oathkeeper:ro"]
+    depends_on: [kratos]
+
+  echo:   # stands in for messenger / firebase-push: answers with the request headers it got
+    image: traefik/whoami:v1.10.3
+
   nginx:
     image: nginx:1.29-alpine
-    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro", "./out:/pki:ro"]
-    ports: ["127.0.0.1:9443:8443"]    # the phone reaches it through `adb reverse tcp:9443 tcp:9443` (8443 is often taken)
-    depends_on: [kratosgate]
+    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro", "./nginx/snippets:/etc/nginx/snippets:ro", "./out:/pki:ro"]
+    # the phone reaches them through `adb reverse tcp:9443 tcp:9443` / `tcp:9444` (8443 is often taken)
+    ports: ["127.0.0.1:9443:8443", "127.0.0.1:9444:8444"]
+    depends_on: [kratosgate, oathkeeper, echo]
 

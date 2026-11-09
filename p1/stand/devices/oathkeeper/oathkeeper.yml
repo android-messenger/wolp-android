@@ -1,0 +1,28 @@
+# Stand Oathkeeper: the production pipeline (cookie_session → allow → header) with
+# a reduced header mutator (the stand identity schema has no role trait).
+serve:
+  proxy: { port: 4455 }
+  api: { port: 4456 }
+log: { level: info, format: text }
+access_rules:
+  repositories: ["file:///etc/config/oathkeeper/access-rules.yml"]
+errors:
+  fallback: [json]
+  handlers: { json: { enabled: true, config: { verbose: true } } }
+authenticators:
+  cookie_session:
+    enabled: true
+    config:
+      check_session_url: http://kratos:4433/sessions/whoami
+      preserve_path: true
+      preserve_query: true
+      subject_from: identity.id
+      extra_from: "@this"
+      only: [ory_kratos_session]
+authorizers: { allow: { enabled: true } }
+mutators:
+  header:
+    enabled: true
+    config:
+      headers:
+        X-User-Id: "{{ print .Subject }}"

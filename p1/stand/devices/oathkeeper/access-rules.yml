@@ -1,0 +1,18 @@
+# app.<host> rules of S3 §11: copies of the production ones with the echo backend
+# standing in for the services, plus the new app-firebase-push rule.
+- id: app-messenger
+  match:
+    url: "<http|https>://<[^/]+>/messenger/<.*>"
+    methods: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://echo:80", strip_path: /messenger }
+- id: app-firebase-push
+  match:
+    url: "<http|https>://<[^/]+>/firebase-push/<.*>"
+    methods: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://echo:80", strip_path: /firebase-push }

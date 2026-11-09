@@ -24,6 +24,8 @@ if [[ ! -f out/int.pem ]]; then
   (cd out && ./device-ca root -key root.key -cert root.pem >/dev/null \
           && ./device-ca intermediate -root-key root.key -root-cert root.pem -key int.key -cert int.pem >/dev/null)
 fi
+# app host trust bundle: device intermediate + root (S3 §10 ssl_client_certificate)
+cat out/int.pem out/root.pem > out/device-ca-bundle.pem
 
 docker compose up -d --build
 echo -n "waiting for /readyz "
