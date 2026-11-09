@@ -5,7 +5,7 @@
 // Both release variants are R8-minified and signed with the release key; verify<Variant>BuildKind
 // runs before every release build.
 //
-// Configuration — Gradle properties (-P…, ORG_GRADLE_PROJECT_…, or ../stand.properties for the stand):
+// Configuration — Gradle properties (-P…, ~/.gradle/gradle.properties, or ../stand.properties for the stand):
 //   wolp.enrollUrl, wolp.appUrl          https://enroll.<host>, https://app.<host> (no path; plan A4)
 //   wolp.serverPins                      sha256/…,sha256/… — primary + backup server key (≥ 2); one source
 //                                        for DeviceTrustConfig.serverPins and the NSC <pin-set> (S1 §4.3)

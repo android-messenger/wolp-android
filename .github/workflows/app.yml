@@ -15,12 +15,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # CI has no real hosts: well-formed placeholders (validateWolpConfig, NSC generation)
-      ORG_GRADLE_PROJECT_wolp.enrollUrl: https://enroll.ci.invalid
-      ORG_GRADLE_PROJECT_wolp.appUrl: https://app.ci.invalid
-      ORG_GRADLE_PROJECT_wolp.serverPins: sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
-      # debug variants trust it, release variants must not (checked below)
-      ORG_GRADLE_PROJECT_wolp.extraTrustAnchor: ../../p1/stand/devices/pki/stand-root.pem
+      # CI has no real hosts: well-formed placeholders (validateWolpConfig, NSC generation). Passed as -P
+      # flags: ORG_GRADLE_PROJECT_wolp.* names (with dots) do not reach Gradle from the runner.
+      # The stand root: debug variants trust it, release variants must not (checked below).
+      WOLP: >-
+        -Pwolp.enrollUrl=https://enroll.ci.invalid
+        -Pwolp.appUrl=https://app.ci.invalid
+        -Pwolp.serverPins=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
+        -Pwolp.extraTrustAnchor=../../p1/stand/devices/pki/stand-root.pem
     defaults:
       run:
         working-directory: app/android
@@ -77,7 +79,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: debug build and unit tests
-        run: ./gradlew --no-daemon :app:assembleProductDebug :app:testProductDebugUnitTest
+        run: ./gradlew --no-daemon $WOLP :app:assembleProductDebug :app:testProductDebugUnitTest
 
       - name: release builds (S2 §7.3) with a throwaway release key
         run: |
@@ -85,13 +87,13 @@ jobs:
             -alias wolp -keyalg EC -groupname secp256r1 -sigalg SHA256withECDSA -dname "CN=ci" -validity 30
           DIGEST=$(keytool -exportcert -keystore "$RUNNER_TEMP/release.p12" -storepass ci-pass -alias wolp | sha256sum | cut -d' ' -f1)
           SIGN="-Pwolp.signing.storeFile=$RUNNER_TEMP/release.p12 -Pwolp.signing.storePassword=ci-pass -Pwolp.signing.keyAlias=wolp -Pwolp.signing.keyPassword=ci-pass -Pwolp.expectedSigningDigests=$DIGEST"
-          ./gradlew --no-daemon $SIGN :app:assembleProductRelease :app:assemblePilotRelease
+          ./gradlew --no-daemon $WOLP $SIGN :app:assembleProductRelease :app:assemblePilotRelease
           # refused: product in the pilot versionCode range; signer not in expectedSigningDigests; stand host
-          if ./gradlew --no-daemon -q $SIGN -Pwolp.productVersionCode=10095 :app:verifyProductReleaseBuildKind; then
+          if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.productVersionCode=10095 :app:verifyProductReleaseBuildKind; then
             echo "verifyProductReleaseBuildKind accepted a pilot-range versionCode"; exit 1; fi
-          if ./gradlew --no-daemon -q $SIGN -Pwolp.expectedSigningDigests=$(printf '00%.0s' {1..32}) :app:verifyPilotReleaseBuildKind; then
+          if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.expectedSigningDigests=$(printf '00%.0s' {1..32}) :app:verifyPilotReleaseBuildKind; then
             echo "verifyPilotReleaseBuildKind accepted a foreign signer"; exit 1; fi
-          if ./gradlew --no-daemon -q $SIGN -Pwolp.appUrl=https://localhost:9444 :app:verifyProductReleaseBuildKind; then
+          if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.appUrl=https://localhost:9444 :app:verifyProductReleaseBuildKind; then
             echo "verifyProductReleaseBuildKind accepted the stand host"; exit 1; fi
           for apk in app/build/outputs/apk/*/release/*.apk; do
             # libwolpdt.so stripped by the app's NDK (API.md §1)
