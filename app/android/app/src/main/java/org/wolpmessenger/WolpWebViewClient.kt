@@ -15,6 +15,7 @@ import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.GatewayCode
 import org.wolpmessenger.web.DenyAction
 import org.wolpmessenger.web.DenyPolicy
+import org.wolpmessenger.web.WebRoutes
 
 /** What the WebView reports to the activity that owns it (S1 §4). Called on the main thread. */
 interface WebHost {
@@ -25,6 +26,8 @@ interface WebHost {
     fun onServerUnverified()
     /** The renderer died or was killed; the WebView is unusable and must be destroyed (S1 §4.4). */
     fun onRendererGone(view: WebView)
+    /** The web client went to its own login route (logout or lost session): login is native (S1 §3.1). */
+    fun onWebLoginRoute()
 }
 
 /** WebView side of S1 §4.1–4.4 (native rules; what to do about them is the activity's job). */
@@ -52,6 +55,16 @@ class WolpWebViewClient(bridge: Bridge, private val host: WebHost) : BridgeWebVi
         // allowed bridge origin (ADR-0001 п. 2)
         if (request.url.isSameOrigin(app) || request.url.isSameOrigin(enroll)) return false
         return super.shouldOverrideUrlLoading(view, request)
+    }
+
+    /** SPA navigation (pushState) included: the web client's login route on app.<host> → native login. */
+    override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+        super.doUpdateVisitedHistory(view, url, isReload)
+        val u = Uri.parse(url ?: return)
+        if (u.isSameOrigin(app) && WebRoutes.isLoginRoute(u.path, AppConfig.START_PATH)) {
+            Log.i(WolpApp.TAG, "web client went to ${u.path}: native login")
+            host.onWebLoginRoute()
+        }
     }
 
     /** S1 §4.2: only the `X-Device-Deny` header counts, and only from app.<host>. */

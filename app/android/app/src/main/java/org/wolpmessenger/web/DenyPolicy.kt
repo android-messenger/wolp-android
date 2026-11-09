@@ -40,3 +40,19 @@ object DenyPolicy {
     fun forUnmarked(status: Int, mainFrame: Boolean): DenyAction =
         if (status == 401 && mainFrame) DenyAction.CHECK_SESSION else DenyAction.NONE
 }
+
+/** Routes of the web client that mean "no session here" (S1 §3.1, v2.13). */
+object WebRoutes {
+    private val LOGIN = setOf("login", "register")
+
+    /**
+     * The SPA moved to its own login/registration route on app.<host> (logout, or a 401 inside the web
+     * app): in the app, login belongs to LoginActivity (S1 §3.1), so the native side takes over.
+     * [path] is the URL path, [startPath] the web client's base (`/messenger-ui/`).
+     */
+    fun isLoginRoute(path: String?, startPath: String): Boolean {
+        if (path == null || !path.startsWith(startPath)) return false
+        return path.removePrefix(startPath).trimEnd('/') in LOGIN
+    }
+}
+

@@ -39,4 +39,15 @@ class DenyPolicyTest {
         assertEquals(DenyAction.NONE, DenyPolicy.forUnmarked(403, mainFrame = true))
         assertEquals(DenyAction.NONE, DenyPolicy.forUnmarked(500, mainFrame = true))
     }
+
+    @Test fun `web client login routes are recognised`() {
+        val start = "/messenger-ui/"
+        listOf("/messenger-ui/login", "/messenger-ui/login/", "/messenger-ui/register").forEach {
+            assertEquals(it, true, WebRoutes.isLoginRoute(it, start))
+        }
+        listOf("/messenger-ui/", "/messenger-ui/logout", "/messenger-ui/app-only", "/login", "/messenger-ui/login/x",
+            "/messenger-ui/loginx", null).forEach {
+            assertEquals("$it", false, WebRoutes.isLoginRoute(it, start))
+        }
+    }
 }
