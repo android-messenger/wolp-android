@@ -1,0 +1,3 @@
+[submodule "app/android/third_party/wolp-device-trust"]
+	path = app/android/third_party/wolp-device-trust
+	url = ../wolp-device-trust.git
