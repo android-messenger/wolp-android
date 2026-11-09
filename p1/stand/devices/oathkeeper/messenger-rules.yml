@@ -1,0 +1,52 @@
+# Messenger mode (docker-compose.messenger.yml): the production rules of deploy/02-platform/oathkeeper
+# for the messenger's routes, with the stand's service names. firebase-push stays on the echo.
+- id: app-messenger
+  match:
+    url: "<http|https>://<[^/]+>/messenger/<.*>"
+    methods: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://messenger:8080", strip_path: /messenger }
+- id: app-key-directory
+  match:
+    url: "<http|https>://<[^/]+>/key-directory/<.*>"
+    methods: [GET, POST, DELETE, HEAD, OPTIONS]
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://keydirectory:8092", strip_path: /key-directory }
+- id: app-ids-admin
+  match:
+    url: "<http|https>://<[^/]+>/ids/admin/<.*>"
+    methods: [GET, HEAD]
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://kratosgate:8080", strip_path: /ids }
+- id: app-ids-people-search
+  match: { url: "<http|https>://<[^/]+>/people/search", methods: [POST] }
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://kratosgate:8080" }
+- id: app-ids-people-batch
+  match: { url: "<http|https>://<[^/]+>/people/batch", methods: [POST] }
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://kratosgate:8080" }
+- id: app-ids-people-get
+  match: { url: "<http|https>://<[^/]+>/people/<[^/]+>", methods: [GET] }
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://kratosgate:8080" }
+- id: app-firebase-push
+  match:
+    url: "<http|https>://<[^/]+>/firebase-push/<.*>"
+    methods: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]
+  authenticators: [{ handler: cookie_session }]
+  authorizer: { handler: allow }
+  mutators: [{ handler: header }]
+  upstream: { url: "http://echo:80", strip_path: /firebase-push }

@@ -8,11 +8,46 @@
       "type": "object",
       "properties": {
         "email": {
-          "type": "string", "format": "email", "title": "E-Mail",
-          "ory.sh/kratos": { "credentials": { "password": { "identifier": true } } }
+          "type": "string",
+          "format": "email",
+          "title": "E-Mail",
+          "ory.sh/kratos": {
+            "credentials": {
+              "password": {
+                "identifier": true
+              }
+            }
+          }
+        },
+        "name": {
+          "type": "object",
+          "properties": {
+            "first": {
+              "type": "string",
+              "title": "First name"
+            },
+            "last": {
+              "type": "string",
+              "title": "Last name"
+            }
+          }
+        },
+        "role": {
+          "type": "string",
+          "title": "Role"
+        },
+        "locale": {
+          "type": "string",
+          "title": "Locale"
+        },
+        "avatar_url": {
+          "type": "string",
+          "title": "Avatar URL"
         }
       },
-      "required": ["email"],
+      "required": [
+        "email"
+      ],
       "additionalProperties": false
     }
   }

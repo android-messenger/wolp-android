@@ -92,7 +92,8 @@ services:
 
   nginx:
     image: nginx:1.29-alpine
-    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro", "./nginx/snippets:/etc/nginx/snippets:ro", "./out:/pki:ro", "./stand-ui:/usr/share/nginx/stand-ui:ro"]
+    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro", "./nginx/snippets:/etc/nginx/snippets:ro", "./out:/pki:ro", "./stand-ui:/usr/share/nginx/stand-ui:ro",
+              "./nginx/webclient-${STAND_WEBCLIENT:-probe}:/etc/nginx/webclient:ro"]   # probe | messenger (messenger-up.sh)
     # the phone reaches them through `adb reverse tcp:9443 tcp:9443` / `tcp:9444` (8443 is often taken)
     ports: ["127.0.0.1:9443:8443", "127.0.0.1:9444:8444"]
     depends_on: [kratosgate, oathkeeper, echo]

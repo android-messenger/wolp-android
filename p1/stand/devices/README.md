@@ -79,3 +79,27 @@ docker compose down -v                    # всё убрать (out/ остаё
 - вопрос 8 HANDOFF: сессии Kratos удалены admin API → `fetch` в окне кэша `check` — `401` без `X-Device-Deny`; документ `/messenger/whoami` → `CHECK_SESSION` → Kratos сессии не видит → вход → `Messenger` (петли нет).
 
 nginx: `nginx.conf` смонтирован файлом — после правки (новый inode) `nginx -s reload` видит старый текст, нужен `docker compose up -d --force-recreate nginx`.
+
+## Живой мессенджер на стенде (`messenger-up.sh`), 2026-11-09
+
+`./messenger-up.sh` (после `./up.sh`) добавляет к стенду бэкенд Hormigas как есть и сборку `messenger-ui`: `docker-compose.messenger.yml` — `messenger` (jar из `repos/HormigaMessanger/target/quarkus-app`, профиль `%prod`), `keydirectory` (образ `wolp-stand/key-directory:local`, собран из `HormigasMessenger/hormiga-key-directory` — образ в GHCR приватный), Redis, Kafka (KRaft, один узел), MinIO (`bitnamilegacy/minio`: MinIO больше не публикует образы), `front4mess` (сборка `repos/messenger/front`, `BASE=/messenger-ui/`). IDS — KratosGate стенда (gRPC `:9090`, REST `:8080`). Без webpush и coturn. `./messenger-up.sh down` — обратно к пробе.
+
+| | Режим пробы (по умолчанию) | Режим мессенджера |
+|---|---|---|
+| `app` `/messenger-ui/` | проба S1-3/S1-4 | `messenger-ui` (`front4mess`); проба — `/probe/` |
+| `app` прочее | Oathkeeper → эхо | Oathkeeper → `messenger`, `key-directory`, `/people/*`, `/ids/admin/*` (правила прода, `oathkeeper/messenger-rules.yml`); `/.ory/kratos/public/`, `/messenger-attachments` → MinIO; WebSocket |
+| браузерный хост | — | `https://localhost:9445/messenger-ui/` без mTLS — второй пользователь в браузере компьютера (сертификат стенда — принять предупреждение) |
+
+Переключается переменной `STAND_WEBCLIENT` (`nginx/webclient-<режим>/`, смонтирован в `/etc/nginx/webclient`). `app-check.sh` рассчитан на режим пробы (эхо на `/messenger/`).
+
+Пользователи: `a37@stand.test` (телефон) и `bob@stand.test`, пароль `stand-Password-2026!`; трейты `name` и `role: client` (схема стенда дополнена полями прода). Oathkeeper стенда передаёт и `X-User-Email` (нужен `messenger`).
+
+**Проверено на A37:** приложение после `Messenger` открывает живой `messenger-ui` (`isNativePlatform() = true`, защита моста установлена); имя пользователя из IDS; поиск bob (`/people/search`), создание чата (`POST /messenger/api/chats` 201), ключи E2EE телефона загружены в `key-directory`; bob в headless Chrome на `:9445` → сообщение → на телефоне по WebSocket через mTLS; ответ с телефона → у bob, оба ✓✓.
+
+**Для S1-5** (видно на телефоне): `messenger-ui` не учитывает вставки — шапка под строкой состояния, **поле ввода под панелью навигации: касание уходит системе, набрать текст нельзя** (`viewport-fit=cover` + `env(safe-area-inset-*)`); в поиске у bob показан email вместо имени.
+
+Находки:
+- MinIO с конца 2025 не публикует образы (Docker Hub и quay пусты) — `bitnamilegacy/minio` (последняя сборка Bitnami) создаёт бакет сам (`MINIO_DEFAULT_BUCKETS`);
+- подписанные ссылки MinIO подписывают `Host`: стенд отдаёт `/messenger-attachments` с обоих хостов с `Host: localhost:9444` (`MINIO_ENDPOINT`). Ссылки абсолютные на `:9444` — из браузера на `:9445` вложения не откроются (нужен клиентский сертификат); на проде один edge-хост;
+- Oathkeeper прода ставит `X-User-Id` только при `role` = `client`/`master`.
+

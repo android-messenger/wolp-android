@@ -70,7 +70,7 @@ if (inFrame) {
     'safe-area (отступы body) ' + ['Top', 'Right', 'Bottom', 'Left'].map(s => css['padding' + s]).join(' '),
   ].join(' · ');
   $('host').textContent = isEnroll ? 'enroll' : 'app';
-  $('ifr').src = '/messenger-ui/?frame=1';
+  $('ifr').src = location.pathname + '?frame=1';
   $('ifr2').src = enrollOrigin + '/messenger-ui/?frame=1';
   const showHist = () => $('hist').textContent = 'history.length=' + history.length + ' hash=' + location.hash;
   addEventListener('popstate', () => { log('popstate ' + location.hash); showHist(); });
