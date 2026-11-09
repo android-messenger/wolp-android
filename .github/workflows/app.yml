@@ -38,6 +38,10 @@ jobs:
           T: ${{ secrets.DEVICE_TRUST_TOKEN }}
         run: |
           [ -z "$T" ] && { echo "DEVICE_TRUST_TOKEN not set — relying on DEVICE_TRUST_DEPLOY_KEY"; exit 0; }
+          # shape only (never the value): length, known prefix, stray whitespace
+          prefix=other; case $T in github_pat_*) prefix=github_pat_ ;; ghp_*) prefix=ghp_ ;; esac
+          ws=no; [[ "$T" =~ [[:space:]] ]] && ws=yes
+          echo "token shape: length ${#T}, prefix $prefix, whitespace $ws"
           code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T" https://api.github.com/repos/android-messenger/wolp-device-trust)
           echo "GET repos/android-messenger/wolp-device-trust → $code"
           case $code in
