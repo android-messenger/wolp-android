@@ -101,6 +101,15 @@ fun OfflineScreen(serverUnverified: Boolean, onRetry: () -> Unit) = Page {
     Button(onClick = onRetry) { Text("Повторить") }
 }
 
+/** S1 §9 «Смена пользователя на устройстве»: no unenroll offered (D15). */
+@Composable
+fun WrongUserScreen(onLogin: () -> Unit, onClose: () -> Unit) = Page {
+    Title("Другой пользователь")
+    Body("Это устройство зарегистрировано за другим пользователем. Обратитесь к администратору.")
+    Button(onClick = onLogin) { Text("Войти снова") }
+    OutlinedButton(onClick = onClose) { Text("Закрыть") }
+}
+
 @Composable
 fun WebViewOutdatedScreen(onRetry: () -> Unit) = Page {
     Title("Обновите Android System WebView")

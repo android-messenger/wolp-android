@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustEvent
 import org.wolpmessenger.launch.Wipe
+import org.wolpmessenger.web.WebData
 
 class WolpApp : Application() {
     /** Process-wide scope (the process also starts for FCM without any activity). */
@@ -29,8 +30,10 @@ class WolpApp : Application() {
         when (e) {
             // S1 §3: wipe on entering Blocked and on every start while blocked (the screen follows the state)
             is TrustEvent.Blocked -> Wipe.onBlocked(this)
-            // S1 §3 VaultReset: clear the web app's E2EE storage before app.<host> loads — S1-3
-            TrustEvent.VaultReset -> Unit
+            // S1 §3 VaultReset: MainActivity clears the web app's E2EE stores before app.<host> runs any
+            // script (the event comes from start-up reconciliation, before the messenger opens).
+            // Names cache and Push.register() join with S1-7.
+            TrustEvent.VaultReset -> WebData.markVaultReset(this)
         }
     }
 

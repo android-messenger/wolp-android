@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- Stand stand-in for messenger-ui on app.<host> (S1-3): one button per S1 §4 scenario, so each
+     can be checked from the app's WebView without the Hormigas backend. Served by nginx behind mTLS +
+     auth_request, like /messenger-ui/ in production (session-optional path, S3 §5.8). -->
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Проба S1-3</title>
+<style>
+:root{color-scheme:light dark}
+body{font:14px system-ui;margin:0;padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 12px)}
+h3{margin:.3em 0}h4{margin:.8em 0 .2em}
+button,label.btn{font:inherit;padding:8px 10px;margin:3px 2px;display:inline-block}
+input[type=file]{display:none}
+pre{white-space:pre-wrap;word-break:break-all;background:#8882;padding:6px;font-size:11px;max-height:40vh;overflow:auto}
+video{width:40vw;max-width:240px;background:#000}
+iframe{width:100%;height:60px;border:1px dashed #888}
+#bar{position:fixed;left:0;right:0;bottom:0;height:env(safe-area-inset-bottom);background:#f80}
+</style>
+</head><body>
+<h3>app — проба S1-3 <small id="frame"></small></h3>
+<div id="info"></div>
+
+<h4>Шлюз</h4>
+<button data-a="echo">fetch эхо (/messenger/headers)</button>
+<button data-a="ping">fetch ping</button>
+<button data-a="doc">Документ /messenger/whoami</button>
+<button data-a="reload">Перезагрузить</button>
+
+<h4>Камера и микрофон</h4>
+<button data-a="mic">Микрофон</button>
+<button data-a="cam">Камера</button>
+<button data-a="stop">Стоп</button>
+<video id="v" autoplay muted playsinline></video>
+
+<h4>Файлы</h4>
+<label class="btn"><input type="file" multiple data-f="any">Файлы</label>
+<label class="btn"><input type="file" accept="image/*" capture="environment" data-f="photo">Фото</label>
+<label class="btn"><input type="file" accept="video/*" capture data-f="video">Видео</label>
+<label class="btn"><input type="file" accept="audio/*" data-f="audio">Голос</label>
+
+<h4>«Назад»</h4>
+<button data-a="push">pushState</button> <span id="hist"></span>
+
+<h4>E2EE (VaultReset)</h4>
+<button data-a="seed">Создать e2ee-*</button>
+<button data-a="dbs">Список баз</button>
+
+<h4>iframe (S1-4)</h4>
+<iframe id="ifr" title="iframe"></iframe>
+
+<pre id="out"></pre>
+<div id="bar"></div>
+<script src="/messenger-ui/probe.js"></script>
+</body></html>

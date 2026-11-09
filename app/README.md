@@ -40,5 +40,13 @@ export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME н�
 
 `verify<Variant>BuildKind` (перед каждой release-сборкой) отказывает, если: тип сборки не совпадает с flavor, `versionCode` не в своём диапазоне, product с dry run, release debuggable, нет подписи или её отпечаток не в `wolp.expectedSigningDigests`, хост — стенд (`localhost`).
 
+## WebView (S1-3, S1 §4)
+| Где | Что |
+|---|---|
+| `WolpWebViewClient` | клиентский сертификат только для `app.<host>` (`proceed`, иначе `ignore()` → `ensureFresh()`, перезагрузка не чаще раза в 30 с только при `Active`); `X-Device-Deny` только с `app.<host>` → `web/DenyPolicy` (JVM-тесты); `onReceivedSslError` → `cancel()` и «не удалось проверить сервер»; `onRenderProcessGone` → `true` |
+| `WolpWebChromeClient` | камера/микрофон — только `https://app.<host>` и только `AUDIO/VIDEO_CAPTURE`; выбор файлов — Capacitor |
+| `MainActivity` | `credentialsVersion` → `clearClientCertPreferences` (последнее обработанное значение — `SharedPreferences`); смена состояния S2 и возврат после > 5 мин в фоне → порядок §3 (`Messenger` — без перезагрузки, иначе `SplashActivity`); ping при `onResume` и раз в 5 мин; `USER_MISMATCH` → `checkSessionBinding` → выход из Kratos и экран «другой пользователь»; «Назад» — `history.back()`, в корне — в фон; VaultReset — скрипт `DOCUMENT_START` удаляет `e2ee-signal`/`e2ee-device`/`e2ee-plaintext` и подтверждает через `WebMessageListener` |
+| вставки | плагин Capacitor `SystemBars` (`insetsHandling: css`): `env(safe-area-inset-*)` при `viewport-fit=cover` на WebView ≥ 140, иначе переменные `--safe-area-inset-*` |
+
 ## CI
 `.github/workflows/app.yml`: debug-сборка и JVM-тесты, обе release-сборки одноразовым ключом, отрицательные проверки `verify*`, урезанная `libwolpdt.so`, нет корня стенда в release. Сабмодуль приватного `wolp-device-trust` забирается deploy-ключом (секрет `DEVICE_TRUST_DEPLOY_KEY`; в организации deploy-ключи должны быть разрешены) или fine-grained токеном с `Contents: read` на `wolp-device-trust` (секрет `DEVICE_TRUST_TOKEN`).

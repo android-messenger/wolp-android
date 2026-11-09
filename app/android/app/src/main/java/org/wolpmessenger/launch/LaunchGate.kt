@@ -17,6 +17,8 @@ sealed interface Screen {
     data object Login : Screen
     data class Onboarding(val reEnroll: Boolean) : Screen
     data object Messenger : Screen
+    /** Not from the order: the pinned `whoami` confirmed USER_MISMATCH and Kratos was logged out (S1 §9). */
+    data object WrongUser : Screen
 }
 
 /** Everything the S1 §3 order looks at; Android and the network live behind it (tests use fakes). */

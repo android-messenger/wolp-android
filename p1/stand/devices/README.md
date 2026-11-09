@@ -22,6 +22,7 @@ docker compose down -v                    # всё убрать (out/ остаё
 | Список отзыва | настоящий `android.googleapis.com/attestation/status` |
 | Хост `app` | порт `9444` (в контейнере 8444): mTLS с бандлом CA устройств (`out/device-ca-bundle.pem`), `auth_request /_device_check`, сниппеты `nginx/snippets/` (копия `strip-identity-headers.conf` из `deploy` + новые `strip-device-headers.conf`, `wolp-device-headers.conf`) |
 | Приложение S1 (`app/`) | `APP_PACKAGE=org.wolpmessenger docker compose up -d kratosgate` (тот же debug-ключ); сборка — `app/tools/stand-config.sh`, затем `assembleProductDebug`. Вход в Kratos — страница стенда `https://localhost:9443/messenger-ui/login` (замена логина `messenger-ui`) через прокси `/.ory/kratos/public/` на хосте enroll |
+| Веб-клиент на `app` | `/messenger-ui/` — **проба S1-3** (`stand-ui/app/`: эхо, ping, документ `/messenger/whoami`, камера/микрофон, файлы, `pushState`, базы `e2ee-*`, iframe) вместо сборки `messenger-ui`; nginx отдаёт статику за mTLS и `auth_request`, как на проде (путь без обязательной сессии). Эхо — `/messenger/headers` (у `traefik/whoami` путь `/echo` — WebSocket) |
 | Порты хоста | `9443` enroll, `9444` app, `18091` admin API и `/readyz` модуля, `4433/4434` Kratos, `55433` PostgreSQL |
 
 Телефон Samsung: выключить **Ajustes → Seguridad y privacidad → Bloqueador automático** (иначе «Depuración USB» не включается), режим разработчика — 7 нажатий на «Número de compilación».
@@ -50,3 +51,21 @@ docker compose down -v                    # всё убрать (out/ остаё
 Находки:
 - ключ устройства был создан только с `DIGEST_SHA256` — Conscrypt подписывает `CertificateVerify` через `NONEwithECDSA`, и телефон молча рвал рукопожатие mTLS (nginx: `peer closed connection in SSL handshake`). Исправлено в `wolp-device-trust` (`DIGEST_NONE`), есть инструментальный тест;
 - `DeviceTrust.init()` — один раз на процесс: после `StandEnrollActivity` (оба URL — enroll) продление уходило на хост enroll (404). `renew.sh` перезапускает процесс приложения.
+
+## S1-3, 2026-11-09, Galaxy A37 (приложение `app/`, productDebug)
+
+`app-check.sh` — 31/31 (+ `/messenger-ui/` без сессии и с чужой сессией → 200 с `X-Device-Renew`; после отзыва → `403 DEVICE_REVOKED`). На телефоне, проба в WebView `MainActivity`:
+- эхо через WebView: mTLS + cookie → бэкенд видит `X-Device-Id` и `X-User-Id`; вставки: `env(safe-area-inset-*)` 44px / 60px (edge-to-edge, Capacitor `SystemBars`);
+- `getUserMedia` на `app` → системные запросы `CAMERA`/`RECORD_AUDIO` → дорожки audio + video; та же WebView на origin `enroll` → `NotAllowedError` (отказ в `WolpWebChromeClient`);
+- выбор файла (DocumentsUI) → файл в `<input type=file>`; «Назад»: `#b` → `#a` → корень → приложение в фон; возврат — порядок §3 → `Messenger`, страница не перезагружается, ping при `onResume`;
+- VaultReset (флаг через `run-as`): `e2ee-*` удалены до скриптов страницы, `chatDB` остался, флаг снят по подтверждению со страницы;
+- `NO_SESSION` на документе (сессии Kratos удалены admin API) → `LoginActivity` → вход → `Messenger`;
+- `USER_MISMATCH` (cookie bob подложена через CDP) → закреплённый `whoami` подтвердил → logout Kratos (сессия bob → 401) → экран «Другой пользователь» → «Войти снова» → `Messenger`;
+- `Page.crash` (CDP) → `onRenderProcessGone`, процесс жив, новая `MainActivity`;
+- продление при открытом WebView (`STAND_CERT_TTL=2h STAND_RENEW_BEFORE=119m`): `renew` → `confirm`, `credentialsVersion 2` → `clearClientCertPreferences`, страница не перезагружалась; следующий `fetch` WebView — уже с новым серийным номером;
+- отзыв админом → перезагрузка документа → `X-Device-Deny: DEVICE_REVOKED` → `VERIFY` (ping) → `Blocked(REVOKED)`, очистка, экран блокировки.
+
+Находки:
+- **кэш `check` (`DEVICES_CHECK_CACHE_TTL`, 30 с) держит сессию Kratos после её удаления**: в этом окне запрос проходит `auth_request`, и 401 отдаёт уже Oathkeeper — **без `X-Device-Deny`**. Документ `app.<host>` тогда показывает JSON Oathkeeper, а не вход; после TTL — `NO_SESSION` как положено. В проде окно такое же (выход в другом месте, отзыв сессий админом);
+- `input.click()` на `<input type=file>` из CDP не открывает выбор файла (нужен жест) — для автоматизации касание по координатам элемента × `devicePixelRatio`;
+- первая загрузка страницы до применения вставок даёт `env(safe-area-inset-*) = 0`, затем Capacitor запрашивает вставки заново (`onPageCommitVisible`).

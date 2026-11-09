@@ -3,8 +3,10 @@ package org.wolpmessenger
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONObject
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.DenySource
 import org.wolpmessenger.devicetrust.api.GatewayCode
@@ -57,6 +59,30 @@ object Gateway {
             ).execute().use { it.code == 200 }
         } catch (e: IOException) {
             Log.i(WolpApp.TAG, "whoami: $e"); false
+        }
+    }
+
+    /**
+     * Kratos browser logout on the enroll host (S1 §9 order, step 2): fetch a logout token with the
+     * session cookie, then use it. False if Kratos could not be reached; the caller clears cookies anyway.
+     */
+    suspend fun logoutKratos(): Boolean = withContext(Dispatchers.IO) {
+        val cookie = AppConfig.kratosCookie() ?: return@withContext true
+        val base = AppConfig.enrollUrl + "/.ory/kratos/public/self-service/logout"
+        try {
+            val client = DeviceTrust.okHttpClient().newBuilder().followRedirects(false).build()
+            val token = client.newCall(
+                Request.Builder().url("$base/browser").header("Cookie", cookie).header("Accept", "application/json").build()
+            ).execute().use { r ->
+                if (r.code == 401) return@withContext true // no session any more
+                if (!r.isSuccessful) return@withContext false
+                JSONObject(r.body?.string() ?: "{}").optString("logout_token").ifEmpty { return@withContext false }
+            }
+            val url = base.toHttpUrl().newBuilder().addQueryParameter("token", token).build()
+            client.newCall(Request.Builder().url(url).header("Cookie", cookie).header("Accept", "application/json").build())
+                .execute().use { it.code in 200..399 }
+        } catch (e: IOException) {
+            Log.i(WolpApp.TAG, "kratos logout: $e"); false
         }
     }
 
