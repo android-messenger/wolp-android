@@ -32,6 +32,21 @@ jobs:
         working-directory: .
         run: echo "sha=$(git ls-tree HEAD app/android/third_party/wolp-device-trust | awk '{print $3}')" >> "$GITHUB_OUTPUT"
 
+      - name: access to wolp-device-trust (HTTP status only, the token is never printed)
+        working-directory: .
+        env:
+          T: ${{ secrets.DEVICE_TRUST_TOKEN }}
+        run: |
+          [ -z "$T" ] && { echo "DEVICE_TRUST_TOKEN not set — relying on DEVICE_TRUST_DEPLOY_KEY"; exit 0; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T" https://api.github.com/repos/android-messenger/wolp-device-trust)
+          echo "GET repos/android-messenger/wolp-device-trust → $code"
+          case $code in
+            200) ;;
+            401) echo "::error::DEVICE_TRUST_TOKEN is invalid or expired (401)"; exit 1 ;;
+            403|404) echo "::error::DEVICE_TRUST_TOKEN has no access to wolp-device-trust ($code): resource owner must be android-messenger, the repository selected, Contents: read, and an org approval if required"; exit 1 ;;
+            *) echo "::error::unexpected $code"; exit 1 ;;
+          esac
+
       - uses: actions/checkout@v4
         with:
           repository: android-messenger/wolp-device-trust
