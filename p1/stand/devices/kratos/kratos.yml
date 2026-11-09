@@ -1,0 +1,21 @@
+# Stand Kratos: password login only, no hooks. The host script logs in through the
+# browser flow and hands the session cookie to the phone.
+version: v1.3.0
+serve:
+  public: { base_url: "http://127.0.0.1:4433/" }
+  admin: { base_url: "http://kratos:4434/" }
+identity:
+  default_schema_id: default
+  schemas: [{ id: default, url: "file:///etc/config/kratos/identity.schema.json" }]
+selfservice:
+  default_browser_return_url: "http://127.0.0.1:4433/"
+  allowed_return_urls: ["http://127.0.0.1:4433/"]
+  methods: { password: { enabled: true } }
+  flows:
+    login: { ui_url: "http://127.0.0.1:4433/ui/login" }
+    error: { ui_url: "http://127.0.0.1:4433/ui/error" }
+secrets:
+  cookie: ["stand-cookie-secret-not-for-production"]
+  cipher: ["0123456789abcdef0123456789abcdef"]
+courier: { smtp: { connection_uri: "smtp://none:none@localhost:25/?disable_starttls=true" } }
+log: { level: info, format: text }
