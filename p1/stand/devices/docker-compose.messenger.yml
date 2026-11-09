@@ -1,0 +1,91 @@
+# Live messenger on the devices stand (S1-5 and later): the Hormigas backend as-is — messenger (Quarkus
+# jar built from repos/HormigaMessanger), key-directory (built from HormigasMessenger/hormiga-key-directory),
+# Redis, Kafka, MinIO — and the messenger-ui build from repos/messenger/front behind app.<host>.
+# KratosGate of the stand is the IDS (gRPC :9090 / REST :8080). Not webpush, not coturn.
+#
+#   ./messenger-up.sh        (= STAND_WEBCLIENT=messenger docker compose -f docker-compose.yml -f docker-compose.messenger.yml up -d)
+services:
+  redis:
+    image: redis:8.6.2-alpine
+    command: redis-server --save "" --loglevel warning
+
+  kafka:
+    image: apache/kafka:4.4.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  minio:   # MinIO no longer publishes images: Bitnami's last build (frozen), which creates the bucket itself
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    environment:
+      MINIO_ROOT_USER: stand
+      MINIO_ROOT_PASSWORD: stand-minio-secret
+      MINIO_DEFAULT_BUCKETS: messenger-attachments
+
+  messenger:
+    image: eclipse-temurin:25-jre
+    user: "${STAND_UID:-1000}:${STAND_GID:-1000}"
+    working_dir: /messenger
+    command: java -Xmx512M -Xms256M -jar quarkus-run.jar
+    volumes: ["${MESSENGER_APP_DIR:-../../../../HormigaMessanger/target/quarkus-app}:/messenger"]
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: hormiga_messenger
+      DB_USER: stand
+      DB_PASSWORD: stand
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MINIO_ENDPOINT: https://localhost:9444   # signed into presigned URLs: the app host (see stand-attachments.conf)
+      MINIO_ACCESS_KEY: stand
+      MINIO_SECRET_KEY: stand-minio-secret
+      MINIO_BUCKET: messenger-attachments
+      HORMIGA_ADMIN_KEY: stand-messenger-admin-key   # also baked into front4mess (VITE_MESSENGER_ADMIN_KEY)
+      IDS_GRPC_HOST: kratosgate
+      IDS_GRPC_PORT: "9090"
+      LOG_FILE: /tmp/messenger.log
+    depends_on: [db, redis, kafka, minio, kratosgate]
+    restart: on-failure
+
+  keydirectory:
+    image: wolp-stand/key-directory:local
+    environment:
+      KD_ADDR: ":8092"
+      KD_DATABASE_URL: postgres://stand:stand@db:5432/hormiga_keys?sslmode=disable
+      KD_USER_HEADER: X-User-Id
+      KD_AUTO_MIGRATE: "true"
+      LOG_LEVEL: info
+    depends_on: [db]
+    restart: on-failure
+
+  front4mess:
+    image: wolp-stand/front4mess:local
+    build:
+      context: ${MESSENGER_FRONT_DIR:-../../../../messenger/front}
+      args:
+        BASE: /messenger-ui/
+        VITE_MESSENGER_BASE: /messenger
+        VITE_KRATOS_URL: /.ory/kratos/public
+        VITE_MESSENGER_ADMIN_KEY: stand-messenger-admin-key
+        VITE_TURN_HOST: localhost
+
+  kratosgate:
+    environment:
+      RECONCILE_INTERVAL: 20s   # new stand identities reach the directory quickly
+
+  oathkeeper:
+    volumes: ["./oathkeeper/messenger-rules.yml:/etc/config/oathkeeper/access-rules.yml:ro"]
+
+  nginx:
+    ports: ["127.0.0.1:9445:8445"]   # browser host (web.<host>), no mTLS
+    depends_on: [front4mess, minio]

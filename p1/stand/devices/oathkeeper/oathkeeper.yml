@@ -26,3 +26,4 @@ mutators:
     config:
       headers:
         X-User-Id: "{{ print .Subject }}"
+        X-User-Email: '{{ print (dig "identity" "traits" "email" "" .Extra) }}'   # messenger mode needs it
