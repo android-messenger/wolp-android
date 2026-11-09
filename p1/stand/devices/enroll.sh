@@ -30,6 +30,7 @@ curl -sf -b "$T/jar" -c "$T/jar" -H 'Accept: application/json' -H 'Content-Type:
   "$K/self-service/login?flow=$FID" -d "{\"method\":\"password\",\"identifier\":\"$EMAIL\",\"password\":\"$PASS\",\"csrf_token\":\"$CSRF\"}" >/dev/null
 COOKIE="ory_kratos_session=$(awk '$6=="ory_kratos_session"{print $7}' "$T/jar")"
 echo "identity $ID, session cookie ok"
+[[ -n "${KEEP_COOKIE:-}" ]] && echo "cookie $COOKIE"   # renew.sh reuses the session
 
 # 2. Onboarding password from the admin API (S3 §5.10).
 PW=$(curl -sf -H "Authorization: Bearer $TOKEN" -H 'X-Admin-Actor: stand' "$GW/admin/v1/onboarding-passwords" \
