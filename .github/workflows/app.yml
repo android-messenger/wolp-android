@@ -42,6 +42,8 @@ jobs:
           prefix=other; case $T in github_pat_*) prefix=github_pat_ ;; ghp_*) prefix=ghp_ ;; esac
           ws=no; [[ "$T" =~ [[:space:]] ]] && ws=yes
           echo "token shape: length ${#T}, prefix $prefix, whitespace $ws"
+          # 200 here + 401/404 below = the token is valid but not admitted to the org (owner, approval)
+          echo "GET /user → $(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T" https://api.github.com/user)"
           code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T" https://api.github.com/repos/android-messenger/wolp-device-trust)
           echo "GET repos/android-messenger/wolp-device-trust → $code"
           case $code in
