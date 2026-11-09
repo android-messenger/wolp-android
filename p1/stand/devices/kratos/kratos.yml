@@ -1,8 +1,9 @@
-# Stand Kratos: password login only, no hooks. The host script logs in through the
-# browser flow and hands the session cookie to the phone.
+# Stand Kratos: password login only, no hooks. The host scripts log in through the browser
+# flow directly on :4433 and hand the session cookie to the phone; the app (S1) logs in through
+# nginx on the enroll host (/.ory/kratos/public/ + the stand login page), hence the public base_url.
 version: v1.3.0
 serve:
-  public: { base_url: "http://127.0.0.1:4433/" }
+  public: { base_url: "https://localhost:9443/.ory/kratos/public/" }
   admin: { base_url: "http://kratos:4434/" }
 identity:
   default_schema_id: default

@@ -21,6 +21,7 @@ docker compose down -v                    # всё убрать (out/ остаё
 | Приложение | `DEVICES_APP_PACKAGE=org.wolpmessenger.devicetrust.sample`, дайджест — debug-ключ (`APP_DIGEST`) |
 | Список отзыва | настоящий `android.googleapis.com/attestation/status` |
 | Хост `app` | порт `9444` (в контейнере 8444): mTLS с бандлом CA устройств (`out/device-ca-bundle.pem`), `auth_request /_device_check`, сниппеты `nginx/snippets/` (копия `strip-identity-headers.conf` из `deploy` + новые `strip-device-headers.conf`, `wolp-device-headers.conf`) |
+| Приложение S1 (`app/`) | `APP_PACKAGE=org.wolpmessenger docker compose up -d kratosgate` (тот же debug-ключ); сборка — `app/tools/stand-config.sh`, затем `assembleProductDebug`. Вход в Kratos — страница стенда `https://localhost:9443/messenger-ui/login` (замена логина `messenger-ui`) через прокси `/.ory/kratos/public/` на хосте enroll |
 | Порты хоста | `9443` enroll, `9444` app, `18091` admin API и `/readyz` модуля, `4433/4434` Kratos, `55433` PostgreSQL |
 
 Телефон Samsung: выключить **Ajustes → Seguridad y privacidad → Bloqueador automático** (иначе «Depuración USB» не включается), режим разработчика — 7 нажатий на «Número de compilación».
