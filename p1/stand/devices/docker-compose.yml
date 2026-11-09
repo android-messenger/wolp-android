@@ -68,8 +68,9 @@ services:
       DEVICES_KRATOS_PUBLIC_URL: http://kratos:4433
       DEVICES_ADMIN_AUTH: ${DEVICES_ADMIN_AUTH:-stand-admin-token-0123456789abcdef}
       DEVICES_SIGNER_SOCKET: /run/device-signer/sock
-      # The sample app (debug key) stands in for org.wolpmessenger on the stand.
-      DEVICES_APP_PACKAGE: org.wolpmessenger.devicetrust.sample
+      # The sample app (debug key) stands in for org.wolpmessenger by default; APP_PACKAGE=org.wolpmessenger
+      # for the S1 app's debug build (app/, same debug key).
+      DEVICES_APP_PACKAGE: ${APP_PACKAGE:-org.wolpmessenger.devicetrust.sample}
       DEVICES_APP_SIGNING_DIGESTS: ${APP_DIGEST:-743b5e2c229eadc3382e60739b162facf19c5b9d4f9c3b9323c4d0295fc39b46}
       DEVICES_INTERNAL_HMAC_SECRET: stand-internal-hmac-secret
       # renew.sh: a short certificate life makes renewal due a minute after enrollment
@@ -91,7 +92,7 @@ services:
 
   nginx:
     image: nginx:1.29-alpine
-    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro", "./nginx/snippets:/etc/nginx/snippets:ro", "./out:/pki:ro"]
+    volumes: ["./nginx/nginx.conf:/etc/nginx/nginx.conf:ro", "./nginx/snippets:/etc/nginx/snippets:ro", "./out:/pki:ro", "./stand-ui:/usr/share/nginx/stand-ui:ro"]
     # the phone reaches them through `adb reverse tcp:9443 tcp:9443` / `tcp:9444` (8443 is often taken)
     ports: ["127.0.0.1:9443:8443", "127.0.0.1:9444:8444"]
     depends_on: [kratosgate, oathkeeper, echo]

@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- Stand stand-in for messenger-ui's /messenger-ui/login (S1 §3.1): a SPA-style Kratos password login
+     through the same-origin proxy /.ory/kratos/public/. After success it pushState()s to /messenger-ui/,
+     like the real SPA, so the app has to notice the session without onPageFinished. -->
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Вход (стенд)</title>
+<style>body{font:16px system-ui;margin:2em}input,button{font:inherit;display:block;width:100%;margin:.5em 0;padding:.6em}#msg{color:#a00}</style>
+</head><body>
+<h2>Вход (стенд)</h2>
+<form id="f"><input id="email" type="email" placeholder="email" autocomplete="username" value="a37@stand.test">
+<input id="password" type="password" placeholder="пароль" autocomplete="current-password">
+<button>Войти</button></form><p id="msg"></p>
+<script>
+const K = '/.ory/kratos/public';
+const msg = t => document.getElementById('msg').textContent = t;
+document.getElementById('f').onsubmit = async e => {
+  e.preventDefault(); msg('');
+  try {
+    const flow = await (await fetch(K + '/self-service/login/browser', {headers: {Accept: 'application/json'}, credentials: 'include'})).json();
+    const csrf = flow.ui.nodes.find(n => n.attributes.name === 'csrf_token').attributes.value;
+    const r = await fetch(K + '/self-service/login?flow=' + flow.id, {method: 'POST', credentials: 'include',
+      headers: {Accept: 'application/json', 'Content-Type': 'application/json'},
+      body: JSON.stringify({method: 'password', identifier: email.value, password: password.value, csrf_token: csrf})});
+    if (!r.ok) { const b = await r.json().catch(() => ({})); msg('Ошибка входа: ' + r.status + ' ' + JSON.stringify(b.ui?.messages ?? b.error ?? '')); return; }
+    history.pushState({}, '', '/messenger-ui/');
+    document.body.innerHTML = '<h2>Вы вошли</h2>';
+  } catch (err) { msg('Ошибка: ' + err); }
+};
+</script></body></html>

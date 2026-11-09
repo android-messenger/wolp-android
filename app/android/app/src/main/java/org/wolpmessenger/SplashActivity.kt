@@ -2,46 +2,151 @@ package org.wolpmessenger
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
+import android.view.View
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.LaunchedEffect
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import org.wolpmessenger.devicetrust.DeviceTrust
-import org.wolpmessenger.devicetrust.api.TrustState
+import org.wolpmessenger.devicetrust.api.EnrollResult
+import org.wolpmessenger.launch.AndroidProbes
+import org.wolpmessenger.launch.LaunchGate
+import org.wolpmessenger.launch.Screen
+import org.wolpmessenger.ui.BlockedScreen
+import org.wolpmessenger.ui.LoginScreen
+import org.wolpmessenger.ui.OfflineScreen
+import org.wolpmessenger.ui.OnboardingScreen
+import org.wolpmessenger.ui.UnsupportedScreen
+import org.wolpmessenger.ui.UpdateScreen
+import org.wolpmessenger.ui.WaitScreen
+import org.wolpmessenger.ui.WebViewOutdatedScreen
 
 /**
- * Launcher. Skeleton (S1-1): waits for the S2 reconciliation and opens the messenger when the
- * device holds a valid certificate; the full S1 §3 order and its screens come with S1-2.
+ * Launcher and the S1 §3 order. app.<host> is never loaded from here: only [Screen.Messenger]
+ * starts MainActivity (ADR-0001 п. 3). The order is re-run on every start of this activity, on
+ * every S2 state change, after login and after an enrollment attempt.
  */
 class SplashActivity : ComponentActivity() {
+    private val gate by lazy { LaunchGate(AndroidProbes(applicationContext)) }
+    private var screen by mutableStateOf<Screen>(Screen.Wait)
+    private var evaluation: Job? = null
+    private var loginOpened = false
+
+    // onboarding (S1 §3.2)
+    private var enrollBusy by mutableStateOf(false)
+    private var enrollMessage by mutableStateOf<String?>(null)
+    private var autoRetried = false
+
+    private val login = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { evaluate() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         secureWindow()
         setContent {
-            val state by DeviceTrust.state.collectAsStateWithLifecycle()
-            LaunchedEffect(state) {
-                if (state is TrustState.Active || state is TrustState.RenewalDue) {
-                    startActivity(Intent(this@SplashActivity, MainActivity::class.java).setData(intent.data))
-                    finish()
-                }
+            when (val s = screen) {
+                Screen.Wait -> WaitScreen()
+                Screen.WebViewOutdated -> WebViewOutdatedScreen(::evaluate)
+                is Screen.Blocked -> BlockedScreen(s.reason) { finishAndRemoveTask() }
+                is Screen.Unsupported -> UnsupportedScreen(s.reasons) { finishAndRemoveTask() }
+                is Screen.Update -> UpdateScreen(s.kind, ::evaluate)
+                is Screen.Offline -> OfflineScreen(s.serverUnverified, ::evaluate)
+                Screen.Login -> LoginScreen(::openLogin)
+                is Screen.Onboarding -> OnboardingScreen(s.reEnroll, enrollBusy, enrollMessage, ::enroll)
+                Screen.Messenger -> WaitScreen()
             }
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
-                    Box(Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(state.toString(), style = MaterialTheme.typography.bodyLarge)
+        }
+        // every S2 state change re-runs the order (S1 §3: renewal, block, revocation)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                DeviceTrust.state.drop(1).collect { evaluate() }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        evaluate()
+    }
+
+    private fun evaluate() {
+        evaluation?.cancel()
+        evaluation = lifecycleScope.launch {
+            val s = gate.evaluate()
+            Log.i(WolpApp.TAG, "launch gate → $s")
+            show(s)
+        }
+    }
+
+    private fun show(s: Screen) {
+        if (s !is Screen.Onboarding) { enrollMessage = null; autoRetried = false }
+        onboardingWindow(s is Screen.Onboarding)
+        screen = s
+        when (s) {
+            Screen.Messenger -> {
+                startActivity(Intent(this, MainActivity::class.java).setData(intent.data))
+                finish()
+            }
+            // open the login page once by itself; afterwards the button does (no loop on "back")
+            Screen.Login -> if (!loginOpened) openLogin()
+            else -> Unit
+        }
+    }
+
+    private fun openLogin() {
+        loginOpened = true
+        login.launch(Intent(this, LoginActivity::class.java))
+    }
+
+    /** S1 §3.2: FLAG_SECURE (even in debug) and no autofill while the onboarding password is on screen. */
+    private fun onboardingWindow(on: Boolean) {
+        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else if (BuildConfig.DEBUG) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        window.decorView.importantForAutofill =
+            if (on) View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS else View.IMPORTANT_FOR_AUTOFILL_AUTO
+    }
+
+    private fun enroll(password: CharArray) {
+        val cookie = AppConfig.kratosCookie()
+        if (cookie == null) { password.fill('\u0000'); show(Screen.Login); return }
+        enrollBusy = true
+        enrollMessage = null
+        lifecycleScope.launch {
+            // keep a copy only for the one automatic retry on Transient; S2 wipes the array it gets
+            val retryCopy = password.copyOf()
+            val r = try { DeviceTrust.enroll(cookie, password) } finally { password.fill('\u0000') }
+            Log.i(WolpApp.TAG, "enroll → ${r::class.simpleName}")
+            enrollBusy = false
+            when (r) {
+                is EnrollResult.Ok -> { retryCopy.fill('\u0000'); evaluate() }
+                is EnrollResult.WrongPassword -> enrollMessage = "Неверный пароль. Осталось попыток: ${r.attemptsLeft}"
+                EnrollResult.PasswordBurned, EnrollResult.PasswordExpired, EnrollResult.NoPassword ->
+                    enrollMessage = "Пароль недействителен. Получите новый у администратора"
+                is EnrollResult.PolicyRejected -> enrollMessage = "Устройство не допущено (${r.reason})"
+                is EnrollResult.UpdateRequired -> show(Screen.Update(r.kind)) // password not burned
+                is EnrollResult.Unsupported -> show(Screen.Unsupported(r.reasons))
+                is EnrollResult.Blocked -> show(Screen.Blocked(r.reason))
+                EnrollResult.NoSession -> { loginOpened = false; show(Screen.Login) }
+                is EnrollResult.Transient -> {
+                    enrollMessage = "Нет связи с сервером, повторите"
+                    if (!autoRetried) {
+                        autoRetried = true
+                        delay((r.retryAfter?.toMillis() ?: 3_000L).coerceIn(1_000L, 60_000L))
+                        if (screen is Screen.Onboarding) { enroll(retryCopy); return@launch }
                     }
                 }
             }
+            retryCopy.fill('\u0000')
         }
     }
 }
