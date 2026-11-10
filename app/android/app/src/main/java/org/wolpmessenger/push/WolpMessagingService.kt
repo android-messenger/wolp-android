@@ -38,7 +38,15 @@ class WolpMessagingService : FirebaseMessagingService() {
             serverNow = DeviceTrust.trustNow(),
             deviceNow = Instant.now(),
         )
-        Log.i(WolpApp.TAG, "push: ${action::class.simpleName}")
+        // stable names: class names are obfuscated by R8 in release builds
+        val label = when (action) {
+            PushAction.Drop -> "drop"
+            PushAction.Generic -> "generic"
+            is PushAction.Message -> "message"
+            is PushAction.Call -> "call"
+            is PushAction.CancelCall -> "call_cancel"
+        }
+        Log.i(WolpApp.TAG, "push: $label")
         val notifier = Notifier(this)
         when (action) {
             PushAction.Drop -> Unit
