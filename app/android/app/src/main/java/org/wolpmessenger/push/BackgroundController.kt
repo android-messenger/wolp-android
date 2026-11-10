@@ -30,6 +30,10 @@ class BackgroundController(
     private var started = false
     private var parked = false
     private var waiting = false
+    /** MainActivity is started (set before its super.onStart, i.e. before the process ON_START it causes). */
+    private var mainStarted = false
+    /** The process came to the foreground only for IncomingCallActivity: the web app stays in the background. */
+    private var deferred = false
     private val parkNow = Runnable {
         waiting = false
         Log.i(WolpApp.TAG, "background: no wsClosed within ${ACK_TIMEOUT_MS} ms, parking the WebView")
@@ -50,7 +54,29 @@ class BackgroundController(
         ProcessLifecycleOwner.get().lifecycle.removeObserver(this)
     }
 
+    /** MainActivity.onStart (before super). A foreground held back for the incoming-call screen happens now. */
+    fun mainStarted() {
+        mainStarted = true
+        if (deferred) {
+            deferred = false
+            foreground()
+        }
+    }
+
+    fun mainStopped() { mainStarted = false }
+
     override fun onStart(owner: LifecycleOwner) {
+        // S1 §7.3: the full-screen incoming call is our activity too, but showing it is not "the user opened
+        // the app": the web app must not reconnect (the decline would then go through it, and the backend
+        // would see the user online). The foreground waits for MainActivity.
+        if (!mainStarted && started) {
+            deferred = true
+            return
+        }
+        foreground()
+    }
+
+    private fun foreground() {
         PushState.appInForeground = true
         PushState.onForeground()
         main.removeCallbacks(parkNow)
@@ -69,6 +95,10 @@ class BackgroundController(
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        if (deferred) { // only the incoming-call screen was shown: nothing was reconnected
+            deferred = false
+            return
+        }
         PushState.appInForeground = false // a locked screen must not keep the open chat silent
         if (PushState.keepConnection()) {
             Log.i(WolpApp.TAG, "background: keeping the connection (system UI or call)")

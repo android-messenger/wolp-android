@@ -132,8 +132,14 @@ class MainActivity : BridgeActivity(), WebHost {
         pushPlugin?.emitTap(tap)
     }
 
+    override fun onStart() {
+        background.mainStarted() // before super: ProcessLifecycleOwner's ON_START follows our onStart
+        super.onStart()
+    }
+
     override fun onStop() {
         super.onStop()
+        background.mainStopped()
         stoppedAt = SystemClock.elapsedRealtime()
     }
 

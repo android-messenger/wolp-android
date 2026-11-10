@@ -48,19 +48,25 @@ class CallAudio(context: Context, private val onRoute: (AudioRoute) -> Unit) {
         am.mode = AudioManager.MODE_IN_COMMUNICATION
         focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-            .setOnAudioFocusChangeListener({ change ->
-                // v1 (§4.5): a GSM call or another app took the audio — tell the web app; ConnectionService is v2
-                if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                    Log.i(WolpApp.TAG, "call: audio focus lost ($change)")
-                    CallState.emit(CallState.EVENT_FOCUS_LOST, mapOf("transient" to (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)))
-                }
-            }, main)
+            // Focus changes are only logged: the WebView itself takes media focus for the call's playback
+            // right after the start (seen on A37), which looks exactly like a loss to us. A GSM call is
+            // recognised by the audio mode instead (modeListener).
+            .setOnAudioFocusChangeListener({ change -> Log.i(WolpApp.TAG, "call: audio focus change $change") }, main)
             .build()
             .also { am.requestAudioFocus(it) }
+        am.addOnModeChangedListener(mainExecutor, modeListener)
         am.addOnCommunicationDeviceChangedListener(mainExecutor, deviceListener)
         am.registerAudioDeviceCallback(deviceCallback, main)
         known = available()
         set(CallRules.defaultRoute(known, video))
+    }
+
+    /** v1 (§4.5): a GSM call rings or is answered during our call → tell the web app; ConnectionService is v2. */
+    private val modeListener = AudioManager.OnModeChangedListener { mode ->
+        if (mode == AudioManager.MODE_RINGTONE || mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_CALL_SCREENING) {
+            Log.i(WolpApp.TAG, "call: phone call took the audio (mode $mode)")
+            CallState.emit(CallState.EVENT_FOCUS_LOST, mapOf("transient" to (mode != AudioManager.MODE_IN_CALL)))
+        }
     }
 
     fun mediaChanged(video: Boolean) {
@@ -76,6 +82,7 @@ class CallAudio(context: Context, private val onRoute: (AudioRoute) -> Unit) {
         started = false
         runCatching { am.unregisterAudioDeviceCallback(deviceCallback) }
         runCatching { am.removeOnCommunicationDeviceChangedListener(deviceListener) }
+        runCatching { am.removeOnModeChangedListener(modeListener) }
         am.clearCommunicationDevice()
         focus?.let { am.abandonAudioFocusRequest(it) }
         focus = null

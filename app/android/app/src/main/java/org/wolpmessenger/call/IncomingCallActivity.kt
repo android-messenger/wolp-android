@@ -59,7 +59,11 @@ class IncomingCallActivity : ComponentActivity() {
             Page {
                 Text(INCOMING, style = MaterialTheme.typography.headlineSmall)
                 if (!isLocked && c.callerName != null) Text(c.callerName, style = MaterialTheme.typography.headlineMedium)
-                Text(if (c.media == "video") "Видеозвонок" else "Аудиозвонок", style = MaterialTheme.typography.bodyLarge)
+                // the backend's call push carries no media type yet: say it only when known
+                when (c.media) {
+                    "video" -> Text("Видеозвонок", style = MaterialTheme.typography.bodyLarge)
+                    "audio" -> Text("Аудиозвонок", style = MaterialTheme.typography.bodyLarge)
+                }
                 Spacer(Modifier.height(48.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                     Button(
