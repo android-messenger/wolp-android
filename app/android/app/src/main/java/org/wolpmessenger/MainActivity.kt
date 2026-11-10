@@ -27,6 +27,7 @@ import org.wolpmessenger.launch.AndroidProbes
 import org.wolpmessenger.launch.LaunchGate
 import org.wolpmessenger.launch.Screen
 import org.wolpmessenger.plugins.DeviceTrustPlugin
+import org.wolpmessenger.plugins.FilesPlugin
 import org.wolpmessenger.web.DenyAction
 import org.wolpmessenger.web.WebData
 
@@ -59,6 +60,7 @@ class MainActivity : BridgeActivity(), WebHost {
             .create()
         secureWindow()
         registerPlugin(DeviceTrustPlugin::class.java) // its load() installs the bridge guard (S1 §5)
+        registerPlugin(FilesPlugin::class.java)       // S1 §5.4: saving attachments
         super.onCreate(savedInstanceState)
         // Installed synchronously after Bridge.create(): the first load's callbacks arrive later on the main looper.
         bridge.webViewClient = WolpWebViewClient(bridge, this)

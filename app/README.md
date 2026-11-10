@@ -59,6 +59,8 @@ export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME н�
 | `web/BridgePolicy`, `CallOrigins` | правило origin (JVM-тесты) и запись origin каждого пропущенного вызова по `callbackId`: плагин в начале каждого метода берёт запись и сверяет сам; нет записи (мост ушёл на `JavascriptInterface`, вызов мимо защиты) — отказ |
 | `plugins/DeviceTrustPlugin` | `getState` (`{state, notAfter?}`), `getDeviceInfo` (`securityLevel` только если S2 знает его из предпроверки этого процесса; `deviceId` S2 наружу не отдаёт), `vaultWrap/Unwrap` — base64, назначения только `e2ee`/`e2ee-plaintext` (`web/JsDeviceTrust`, JVM-тесты); ошибки — `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `VAULT_KEY_GONE`, `VAULT_LOCKED`, `VAULT_CORRUPT`, `UNAVAILABLE`; входные и выходные байты затираются |
 
+| `plugins/FilesPlugin`, `web/JsFiles` | `saveDownload({url, fileName?, mimeType?})` (S1 §5.4): URL только на origin `app.<host>`, диалог SAF, загрузка клиентом S2 (пины, mTLS) с cookie Kratos потоком в документ, PDF — открыть после сохранения; `INVALID_ARGUMENT`, `DOWNLOAD_FAILED` (документ удаляется), отмена → `saved: false`; та же защита моста (`BridgeGuard.GUARDED`) |
+
 В debug Capacitor пишет в logcat параметры вызовов (`methodData`), включая данные `vaultWrap` — `setLoggingEnabled` только для debug.
 
 ## CI

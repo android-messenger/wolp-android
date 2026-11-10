@@ -12,6 +12,8 @@ object AppConfig {
     val enrollUrl: String = BuildConfig.ENROLL_URL
     /** The API host (mTLS): XHR, WebSocket, Kratos. Never the main frame (security/09). */
     val appUrl: String = BuildConfig.APP_URL
+    /** `scheme://host[:port]` of [appUrl]: where the `Files` plugin may download from (S1 §5.4). */
+    val appOrigin: String = originOf(appUrl)
 
     /**
      * The packaged UI (security/09-ui-in-apk.md): Capacitor serves assets/public as `https://<uiHost>/`
