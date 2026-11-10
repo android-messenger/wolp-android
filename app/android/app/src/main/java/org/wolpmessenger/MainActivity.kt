@@ -26,6 +26,8 @@ import org.wolpmessenger.devicetrust.api.TrustState
 import org.wolpmessenger.launch.AndroidProbes
 import org.wolpmessenger.launch.LaunchGate
 import org.wolpmessenger.launch.Screen
+import org.wolpmessenger.call.CallService
+import org.wolpmessenger.plugins.CallPlugin
 import org.wolpmessenger.plugins.DeviceTrustPlugin
 import org.wolpmessenger.plugins.FilesPlugin
 import org.wolpmessenger.plugins.PushPlugin
@@ -71,9 +73,13 @@ class MainActivity : BridgeActivity(), WebHost {
         registerPlugin(DeviceTrustPlugin::class.java) // its load() installs the bridge guard (S1 §5)
         registerPlugin(FilesPlugin::class.java)       // S1 §5.4: saving attachments
         registerPlugin(PushPlugin::class.java)        // S1 §5.2, §7.0
+        registerPlugin(CallPlugin::class.java)        // S1 §5.3, §4.5
         super.onCreate(savedInstanceState)
         // Installed synchronously after Bridge.create(): the first load's callbacks arrive later on the main looper.
         bridge.webViewClient = WolpWebViewClient(bridge, this)
+        // S1 §4.5 (P1-h): with Capacitor's KeepRunning (default true) Bridge.onPause never calls
+        // webView.onPause()/pauseTimers(), so JS and media go on during a call in the background.
+        if (!bridge.shouldKeepRunning()) Log.e(WolpApp.TAG, "KeepRunning is off: a call would stop when minimised")
         bridge.webView.webChromeClient = WolpWebChromeClient(bridge) // registers its launchers: before STARTED
         if (WebData.vaultResetPending(this)) applyVaultReset()
         pushPlugin?.onWsClosed = background::onWsClosed
@@ -115,6 +121,7 @@ class MainActivity : BridgeActivity(), WebHost {
 
     override fun onDestroy() {
         background.detach()
+        CallService.webViewGone(this) // §4.5: without Call.ended() within 10 s the call service stops itself
         super.onDestroy()
     }
 
@@ -125,8 +132,14 @@ class MainActivity : BridgeActivity(), WebHost {
         pushPlugin?.emitTap(tap)
     }
 
+    override fun onStart() {
+        background.mainStarted() // before super: ProcessLifecycleOwner's ON_START follows our onStart
+        super.onStart()
+    }
+
     override fun onStop() {
         super.onStop()
+        background.mainStopped()
         stoppedAt = SystemClock.elapsedRealtime()
     }
 

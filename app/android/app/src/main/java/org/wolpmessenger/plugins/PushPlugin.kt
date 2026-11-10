@@ -133,7 +133,10 @@ class PushPlugin : Plugin() {
         val o = JSObject()
         t.conversationId?.let { o.put("conversationId", it) }
         if (t.callConversationId != null && t.callerId != null) {
-            o.put("call", JSObject().put("conversationId", t.callConversationId).put("callerId", t.callerId).apply { t.media?.let { put("media", it) } })
+            o.put("call", JSObject().put("conversationId", t.callConversationId).put("callerId", t.callerId).apply {
+                t.media?.let { put("media", it) }
+                if (t.accept) put("accept", true)
+            })
         }
         notifyListeners(EVENT_TAP, o, true)
     }

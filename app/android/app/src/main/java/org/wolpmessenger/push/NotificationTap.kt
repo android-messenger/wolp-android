@@ -6,12 +6,20 @@ import android.net.Uri
  * Data of a notification tap, carried as the intent data of SplashActivity → MainActivity
  * (MainActivity is not exported and starts only after the S1 §3 order) → `notificationTap`.
  */
-data class NotificationTap(val conversationId: String?, val callConversationId: String?, val callerId: String?, val media: String?) {
+data class NotificationTap(
+    val conversationId: String?,
+    val callConversationId: String?,
+    val callerId: String?,
+    val media: String?,
+    /** S1 §7.3: «Принять» on the native call screen — the web app answers the re-sent offer without asking again. */
+    val accept: Boolean = false,
+) {
     fun toUri(): Uri = Uri.Builder().scheme(SCHEME).authority("tap").apply {
         conversationId?.let { appendQueryParameter("conversationId", it) }
         callConversationId?.let { appendQueryParameter("call", it) }
         callerId?.let { appendQueryParameter("caller", it) }
         media?.let { appendQueryParameter("media", it) }
+        if (accept) appendQueryParameter("accept", "1")
     }.build()
 
     companion object {
@@ -20,7 +28,12 @@ data class NotificationTap(val conversationId: String?, val callConversationId: 
         fun from(uri: Uri?): NotificationTap? {
             if (uri?.scheme != SCHEME || uri.authority != "tap") return null
             fun q(k: String) = JsPush.id(uri.getQueryParameter(k))
-            return NotificationTap(q("conversationId"), q("call"), q("caller"), q("media")?.takeIf { it == "audio" || it == "video" })
+            val call = q("call")
+            val caller = q("caller")
+            return NotificationTap(
+                q("conversationId"), call, caller, q("media")?.takeIf { it == "audio" || it == "video" },
+                accept = call != null && caller != null && uri.getQueryParameter("accept") == "1",
+            )
         }
     }
 }

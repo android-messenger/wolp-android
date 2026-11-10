@@ -9,7 +9,7 @@ sealed interface PushAction {
     /** Could not decrypt (Vault unavailable, key replaced): a notification without details. */
     data object Generic : PushAction
     data class Message(val conversationId: String?, val senderId: String?) : PushAction
-    data class Call(val conversationId: String, val callerId: String, val media: String?) : PushAction
+    data class Call(val conversationId: String, val callerId: String, val media: String?, val ts: String? = null) : PushAction
     data class CancelCall(val conversationId: String) : PushAction
 }
 
@@ -41,7 +41,7 @@ object PushRules {
             PushPayload.Type.CALL -> {
                 val conv = e.conversationId ?: return PushAction.Drop
                 val caller = e.senderId ?: return PushAction.Drop
-                if (callExpired(e.ts, serverNow, deviceNow)) PushAction.Drop else PushAction.Call(conv, caller, e.media)
+                if (callExpired(e.ts, serverNow, deviceNow)) PushAction.Drop else PushAction.Call(conv, caller, e.media, e.ts)
             }
             PushPayload.Type.CALL_CANCEL -> e.conversationId?.let { PushAction.CancelCall(it) } ?: PushAction.Drop
         }

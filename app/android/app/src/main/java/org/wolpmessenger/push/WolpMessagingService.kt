@@ -6,6 +6,9 @@ import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.wolpmessenger.WolpApp
+import org.wolpmessenger.call.CallRules
+import org.wolpmessenger.call.IncomingCall
+import org.wolpmessenger.call.RingService
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustState
 import java.io.File
@@ -52,8 +55,16 @@ class WolpMessagingService : FirebaseMessagingService() {
             PushAction.Drop -> Unit
             PushAction.Generic -> notifier.message(null, null)
             is PushAction.Message -> notifier.message(action.conversationId, name(action.senderId))
-            is PushAction.Call -> notifier.call(action.conversationId, action.callerId, action.media, name(action.callerId))
-            is PushAction.CancelCall -> notifier.cancelCall(action.conversationId)
+            is PushAction.Call -> {
+                // §7.3: ring through the FGS; if it may not start — the insistent notification as before
+                val call = IncomingCall(action.conversationId, action.callerId, action.media, name(action.callerId))
+                val ringMs = CallRules.ringFor(action.ts, DeviceTrust.trustNow(), Instant.now()).toMillis()
+                if (!RingService.start(this, call, ringMs)) notifier.call(call.conversationId, call.callerId, call.media, call.callerName)
+            }
+            is PushAction.CancelCall -> {
+                RingService.cancel(this, action.conversationId)
+                notifier.cancelCall(action.conversationId)
+            }
         }
     }
 
