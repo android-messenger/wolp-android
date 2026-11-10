@@ -9,11 +9,13 @@ import org.junit.Test
 class JsFilesTest {
     private val app = "https://localhost:9444"
 
-    @Test fun `only https URLs on exactly the app origin`() {
+    @Test fun `only https URLs on the app origin or the app host on 443`() {
         val ok = "https://localhost:9444/messenger-attachments/01M?X-Amz-Signature=ab"
         assertEquals(ok, JsFiles.url(ok, app))
         assertEquals("https://app.example.org:443/x", JsFiles.url("https://app.example.org:443/x", "https://app.example.org"))
-        assertNull(JsFiles.url("https://localhost/x", app))             // the UI origin
+        assertEquals("https://localhost/messenger-attachments/x", JsFiles.url("https://localhost/messenger-attachments/x", app)) // same host, 443
+        assertEquals("https://m.example.org/a", JsFiles.url("https://m.example.org/a", "https://m.example.org:8443"))
+        assertNull(JsFiles.url("https://ui.example.org/a", "https://m.example.org:8443"))
         assertNull(JsFiles.url("https://localhost:9443/x", app))        // enroll
         assertNull(JsFiles.url("http://localhost:9444/x", app))
         assertNull(JsFiles.url("https://evil.test/x", app))

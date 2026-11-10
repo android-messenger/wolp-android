@@ -4,8 +4,9 @@ import java.net.URI
 
 /**
  * Pure argument rules of the `Files` plugin (S1 §5.4), JVM-tested. The plugin downloads with the
- * app's own pinned mTLS client and the Kratos cookie, so the URL is held to the app (API) origin:
- * the page cannot turn it into a fetcher for other hosts.
+ * app's own pinned mTLS client and the Kratos cookie, so the URL is held to the app host: the app
+ * (API) origin itself, or the same host on 443, where the backend's single MinIO endpoint signs
+ * presigned URLs (wolpertinger: https://<host>/messenger-attachments). Never another host.
  */
 object JsFiles {
     const val DOWNLOAD_FAILED = "DOWNLOAD_FAILED"
@@ -14,12 +15,14 @@ object JsFiles {
     /** Above the web client's attachment limit (25 MB) with room; a larger body is refused. */
     const val MAX_BYTES = 64L * 1024 * 1024
 
-    /** [url] if it is https on exactly [appOrigin] (scheme, host, port), else null. */
+    /** [url] if it is https on exactly [appOrigin] or on the same host's port 443, else null. */
     fun url(url: String?, appOrigin: String): String? {
         val u = runCatching { URI(url ?: return null) }.getOrNull() ?: return null
         if (u.scheme != "https" || u.host.isNullOrEmpty() || u.rawUserInfo != null) return null
-        val origin = "${u.scheme}://${u.rawAuthority}"
-        return if (BridgePolicy.normalize(origin) == BridgePolicy.normalize(appOrigin)) url else null
+        val origin = BridgePolicy.normalize("${u.scheme}://${u.rawAuthority}")
+        val app = runCatching { URI(appOrigin) }.getOrNull() ?: return null
+        val allowed = setOf(BridgePolicy.normalize(appOrigin), BridgePolicy.normalize("https://${app.host}"))
+        return if (origin in allowed) url else null
     }
 
     /** A plain file name for the system save dialog: no path, no control characters, ≤ 120 chars. */
