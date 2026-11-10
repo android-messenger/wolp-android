@@ -11,7 +11,7 @@ export STAND_UID="$(id -u)" STAND_GID="$(id -g)" APP_PACKAGE="${APP_PACKAGE:-org
 M=(-f docker-compose.yml -f docker-compose.messenger.yml)
 
 if [[ "${1:-}" == down ]]; then
-  docker compose "${M[@]}" stop messenger keydirectory front4mess kafka redis minio
+  docker compose "${M[@]}" stop minio-loopback messenger keydirectory front4mess kafka redis minio
   STAND_WEBCLIENT=probe docker compose up -d --force-recreate oathkeeper nginx kratosgate
   exit 0
 fi
@@ -20,6 +20,14 @@ APP_DIR="${MESSENGER_APP_DIR:-../../../../HormigaMessanger/target/quarkus-app}"
 [[ -f $APP_DIR/quarkus-run.jar ]] || { echo "no $APP_DIR/quarkus-run.jar — build repos/HormigaMessanger first" >&2; exit 1; }
 docker image inspect wolp-stand/key-directory:local >/dev/null 2>&1 || { echo "no image wolp-stand/key-directory:local" >&2; exit 1; }
 
+# JVM truststore of the messenger: the JDK's CAs + the stand root (its own MinIO calls, minio-loopback)
+if [[ ! -f out/stand-trust.p12 || pki/stand-root.pem -nt out/stand-trust.p12 ]]; then
+  docker run --rm -u "$STAND_UID:$STAND_GID" -v "$PWD/out:/out" -v "$PWD/pki:/pki:ro" eclipse-temurin:25-jre sh -c \
+    'keytool -importkeystore -srckeystore "$JAVA_HOME/lib/security/cacerts" -srcstorepass changeit \
+       -destkeystore /out/stand-trust.p12 -deststoretype PKCS12 -deststorepass changeit -noprompt >/dev/null 2>&1 &&
+     keytool -importcert -alias wolp-stand-root -file /pki/stand-root.pem -keystore /out/stand-trust.p12 \
+       -storepass changeit -noprompt >/dev/null'
+fi
 docker compose up -d db
 until docker compose exec -T db pg_isready -U stand -q; do sleep 1; done
 for db in hormiga_messenger hormiga_keys; do

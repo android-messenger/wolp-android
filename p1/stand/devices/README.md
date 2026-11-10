@@ -125,5 +125,9 @@ nginx: `nginx.conf` смонтирован файлом — после прав�
 
 Находки:
 - без `credentials` presigned-загрузка вложения получила бы `NO_SESSION` (`auth_request` на `/messenger-attachments`): в `messenger-ui` загрузка и выгрузка теперь с cookie;
-- **вложения на стенде не работают и без UI в APK**: `messenger` сам ходит в MinIO по `MINIO_ENDPOINT=https://localhost:9444` («Could not ensure MinIO bucket», `Connection refused` изнутри контейнера). Бэкенд знает один endpoint для себя и для клиентов (split-horizon) — на стенде он недостижим из контейнера;
+- вложения на стенде не работали и без UI в APK: `messenger` сам ходит в MinIO по `MINIO_ENDPOINT=https://localhost:9444` (один endpoint для себя и клиентов), а изнутри контейнера это `Connection refused`. **Исправлено (2026-11-10):** спутник `minio-loopback` (`network_mode: service:messenger`, `nginx/minio-loopback.conf`) слушает `localhost:9444` в сетевом пространстве `messenger` с TLS стенда и проксирует в MinIO с `Host: localhost:9444`; JVM мессенджера доверяет корню стенда (`out/stand-trust.p12`, собирает `messenger-up.sh`, `JAVA_TOOL_OPTIONS`). Полный цикл из UI в APK: `upload-url` → PUT `200` → `confirm` `202` → `download-url` → GET `200`, байты совпадают;
 - отзыв устройства на UI из APK не прогонялся (нужна новая регистрация): ветка `onReceivedHttpError` → `DenyPolicy` та же, что проверена в S1-3, изменился только origin документа.
+
+## Плагин `Files` (S1 §5.4), 2026-11-10, Galaxy A37
+
+`Capacitor.Plugins.Files.saveDownload({url, fileName, mimeType})` с presigned-ссылкой вложения → системный диалог «Guardar» с именем файла → `{"saved":true}`, `/sdcard/Download/wolp-test.txt` побайтно равен выгруженному. URL на чужом хосте и на origin самого UI → `INVALID_ARGUMENT`; отмена диалога → `{"saved":false}`; ответ MinIO `403` → `DOWNLOAD_FAILED`, недописанный документ удалён.

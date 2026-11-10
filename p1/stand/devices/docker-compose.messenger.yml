@@ -37,8 +37,10 @@ services:
     user: "${STAND_UID:-1000}:${STAND_GID:-1000}"
     working_dir: /messenger
     command: java -Xmx512M -Xms256M -jar quarkus-run.jar
-    volumes: ["${MESSENGER_APP_DIR:-../../../../HormigaMessanger/target/quarkus-app}:/messenger"]
+    volumes: ["${MESSENGER_APP_DIR:-../../../../HormigaMessanger/target/quarkus-app}:/messenger", "./out:/pki:ro"]
     environment:
+      # trusts the stand root for its own calls to MINIO_ENDPOINT (minio-loopback); built by messenger-up.sh
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/pki/stand-trust.p12 -Djavax.net.ssl.trustStorePassword=changeit
       DB_HOST: db
       DB_PORT: "5432"
       DB_NAME: hormiga_messenger
@@ -55,6 +57,13 @@ services:
       IDS_GRPC_PORT: "9090"
       LOG_FILE: /tmp/messenger.log
     depends_on: [db, redis, kafka, minio, kratosgate]
+    restart: on-failure
+
+  minio-loopback:   # MINIO_ENDPOINT (https://localhost:9444) for the backend itself: see nginx/minio-loopback.conf
+    image: nginx:1.29-alpine
+    network_mode: "service:messenger"
+    volumes: ["./nginx/minio-loopback.conf:/etc/nginx/nginx.conf:ro", "./out:/pki:ro"]
+    depends_on: [messenger, minio]
     restart: on-failure
 
   keydirectory:
