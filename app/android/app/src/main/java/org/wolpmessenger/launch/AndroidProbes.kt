@@ -16,8 +16,16 @@ class AndroidProbes(private val context: Context) : LaunchProbes {
 
     override suspend fun precheck(): PrecheckResult = DeviceTrust.precheck()
 
-    // S1-8 (update manifests) fills this; until then no manifest has been accepted
-    override suspend fun mandatoryUpdate(): Boolean = false
+    /**
+     * Until S1-8 (update manifests): the gateway's minimum from the last ping ([MinVersion]). When it
+     * says «outdated», ask once more — the minimum may have been lowered (needs the certificate).
+     */
+    override suspend fun mandatoryUpdate(): Boolean {
+        if (!MinVersion.outdated()) return false
+        val s = trustState()
+        if (s !is TrustState.NotEnrolled && s !is TrustState.ReEnrollRequired) Gateway.ping()
+        return MinVersion.outdated()
+    }
 
     override suspend fun reachable(enrolled: Boolean): Reachability =
         if (!enrolled) {

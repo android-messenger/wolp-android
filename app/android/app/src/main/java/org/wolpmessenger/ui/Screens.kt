@@ -1,5 +1,6 @@
 package org.wolpmessenger.ui
 
+import org.wolpmessenger.BuildConfig
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,7 +90,7 @@ fun UpdateScreen(kind: UpdateKind?, onRetry: () -> Unit) = Page {
     Title("Нужно обновление")
     Body(
         if (kind == UpdateKind.OS) "Обновите систему: патч безопасности слишком старый."
-        else "Эта версия приложения больше не поддерживается. Установите новую версию."
+        else "Эта версия приложения (${BuildConfig.VERSION_NAME}) больше не поддерживается. Установите новую версию."
     )
     OutlinedButton(onClick = onRetry) { Text("Проверить снова") }
 }

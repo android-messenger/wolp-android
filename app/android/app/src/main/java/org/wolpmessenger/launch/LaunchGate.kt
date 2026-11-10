@@ -11,7 +11,7 @@ sealed interface Screen {
     data object WebViewOutdated : Screen
     data class Blocked(val reason: BlockReason?) : Screen
     data class Unsupported(val reasons: List<String>) : Screen
-    /** [kind] null = mandatory app update from the update manifest (S1 §8). */
+    /** [kind] null = mandatory app update: the gateway's minimum version (S1 §8 manifest after S1-8). */
     data class Update(val kind: UpdateKind?) : Screen
     data class Offline(val serverUnverified: Boolean = false) : Screen
     data object Login : Screen
@@ -28,7 +28,7 @@ interface LaunchProbes {
     fun webViewUsable(): Boolean
     /** Steps 2/3 before enrollment (S2 keeps the result cached; `Compromised` has already blocked). */
     suspend fun precheck(): PrecheckResult
-    /** Step 4: versionCode < max(minSupportedVersionCode) of accepted manifests (S1 §8). */
+    /** Step 4: versionCode < the gateway's minimum (`X-Device-Min-App-Version`; S1 §8 manifests after S1-8). */
     suspend fun mandatoryUpdate(): Boolean
     /** Step 5: the gateway answers — enroll manifest before enrollment, pinned ping after. */
     suspend fun reachable(enrolled: Boolean): Reachability
@@ -75,6 +75,8 @@ class LaunchGate(private val p: LaunchProbes) {
                 Reachability.SERVER_UNVERIFIED -> return Screen.Offline(serverUnverified = true)
                 Reachability.OK -> Unit
             }
+            // 5a — the ping of step 5 may have brought a new minimum version (S3 §5.8a)
+            if (enrolled && p.mandatoryUpdate()) return Screen.Update(null)
             // 6
             if (!p.hasSession()) return Screen.Login
             // 7
