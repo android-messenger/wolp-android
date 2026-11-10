@@ -103,3 +103,27 @@ nginx: `nginx.conf` смонтирован файлом — после прав�
 - подписанные ссылки MinIO подписывают `Host`: стенд отдаёт `/messenger-attachments` с обоих хостов с `Host: localhost:9444` (`MINIO_ENDPOINT`). Ссылки абсолютные на `:9444` — из браузера на `:9445` вложения не откроются (нужен клиентский сертификат); на проде один edge-хост;
 - Oathkeeper прода ставит `X-User-Id` только при `role` = `client`/`master`.
 
+
+## UI в APK (`security/09`), 2026-11-10, Galaxy A37 (productDebug)
+
+Приложение грузит app-сборку `messenger-ui` из `assets/public` как `https://localhost/` (`wolp.uiHost=localhost`, same-site с `localhost:9444`); API, WebSocket и Kratos — кросс-origin на `https://localhost:9444`. nginx хоста `app`: CORS только для `Origin: https://localhost` (`map $wolp_ui_origin` в `nginx.conf`, сниппет `snippets/wolp-ui-cors.conf` в каждой location, куда ходит UI, включая `@dt_401`/`@dt_403`); preflight `OPTIONS` отвечает `return 204` на уровне `server` — до `auth_request` (у preflight нет cookie). Заголовки CORS от upstream (`Kratos`) снимаются.
+
+Сборка: `VITE_API_ORIGIN=https://localhost:9444 npm run build:app` в `messenger/front` (+ `VITE_TURN_HOST`, `VITE_MESSENGER_ADMIN_KEY` как у `front4mess`), затем `assembleProductDebug` (`wolp.uiDist` по умолчанию — этот `dist-app`).
+
+| Проверка | Результат |
+|---|---|
+| UI из APK | `Handling local request: https://localhost/assets/…` — в сеть за ассетами не ходит; `location.origin = https://localhost`, `document.cookie` пуст (cookie Kratos — у `localhost:9444`) |
+| preflight из WebView | **несёт клиентский сертификат**: `OPTIONS … 204 verify=SUCCESS` (curl без сертификата — `400`) |
+| XHR/fetch с cookie и mTLS | `whoami`, `/messenger/api/chats`, `/people/*`, `/key-directory/v1/*` — `200` |
+| `fetch` с `credentials: "omit"` | сертификат тоже уходит (`verify=SUCCESS`), cookie — нет → `401 X-Device-Deny: NO_SESSION`; заголовок читается из JS (`Access-Control-Expose-Headers`) |
+| WebSocket | `wss://localhost:9444/messenger/ws` → `101`, кадры E2EE от телефона в логе `messenger` |
+| мост | `bridge guard: installed for https://localhost`; `vaultWrap` с главного фрейма UI проходит |
+| переход документа на `localhost:9444` | `navigation to the API host refused: /probe/`, страница остаётся на `https://localhost/` |
+| `X-Device-Deny` из XHR | `onReceivedHttpError` срабатывает: `webview deny NO_SESSION (401, mainFrame=false) → NONE` |
+| уход веб-клиента на `/login` при живой сессии | `web client went to /login: native login` → снова `https://localhost/` |
+| вложения: PUT/GET на `/messenger-attachments` с `credentials`/`withCredentials` | preflight `204`, запрос доходит до MinIO (ответ MinIO читается) |
+
+Находки:
+- без `credentials` presigned-загрузка вложения получила бы `NO_SESSION` (`auth_request` на `/messenger-attachments`): в `messenger-ui` загрузка и выгрузка теперь с cookie;
+- **вложения на стенде не работают и без UI в APK**: `messenger` сам ходит в MinIO по `MINIO_ENDPOINT=https://localhost:9444` («Could not ensure MinIO bucket», `Connection refused` изнутри контейнера). Бэкенд знает один endpoint для себя и для клиентов (split-horizon) — на стенде он недостижим из контейнера;
+- отзыв устройства на UI из APK не прогонялся (нужна новая регистрация): ветка `onReceivedHttpError` → `DenyPolicy` та же, что проверена в S1-3, изменился только origin документа.

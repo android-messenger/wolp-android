@@ -32,6 +32,17 @@ class BridgePolicyTest {
         assertFalse(BridgePolicy.admit(null, true, app))
     }
 
+    @Test fun `packaged UI origin is admitted, the API host is not`() {
+        // security/09: plugins answer the UI from the APK (https://<uiHost>), never a document of the server
+        val ui = "https://localhost"
+        assertTrue(BridgePolicy.admit("https://localhost:443", true, ui))
+        assertFalse(BridgePolicy.admit("https://localhost:9444", true, ui)) // stand app (API) host
+        assertFalse(BridgePolicy.admit("https://localhost:9443", true, ui)) // stand enroll
+        val prodUi = "https://ui.example.org"
+        assertFalse(BridgePolicy.admit("https://example.org:8443", true, prodUi))
+        assertFalse(BridgePolicy.admit("https://ui.example.org:8443", true, prodUi))
+    }
+
     @Test fun `a call without a guard record is refused`() = assertFalse(CallOrigins.allowed("42", app))
 
     @Test fun `a recorded call is allowed once`() {

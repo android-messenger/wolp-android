@@ -34,6 +34,7 @@ interface WebHost {
 class WolpWebViewClient(bridge: Bridge, private val host: WebHost) : BridgeWebViewClient(bridge) {
     private val app = Uri.parse(AppConfig.appUrl)
     private val enroll = Uri.parse(AppConfig.enrollUrl)
+    private val ui = Uri.parse(AppConfig.uiOrigin)
 
     override fun onReceivedClientCertRequest(view: WebView, request: ClientCertRequest) {
         if (request.host != app.host || request.port != app.portOrDefault()) {
@@ -51,23 +52,32 @@ class WolpWebViewClient(bridge: Bridge, private val host: WebHost) : BridgeWebVi
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-        // enroll stays in the WebView without being in allowNavigation, which would also make it an
-        // allowed bridge origin (ADR-0001 п. 2)
-        if (request.url.isSameOrigin(app) || request.url.isSameOrigin(enroll)) return false
+        // the packaged UI and enroll stay in the WebView (enroll without being in allowNavigation, which
+        // would also make it an allowed bridge origin, ADR-0001 п. 2)
+        if (request.url.isSameOrigin(ui) || request.url.isSameOrigin(enroll)) return false
+        // security/09: the API host never gets a document of its own in the app's WebView
+        if (request.url.isSameOrigin(app)) {
+            Log.w(WolpApp.TAG, "navigation to the API host refused: ${request.url.path}")
+            return true
+        }
         return super.shouldOverrideUrlLoading(view, request)
     }
 
-    /** SPA navigation (pushState) included: the web client's login route on app.<host> → native login. */
+    /** SPA navigation (pushState) included: the web client's login route → native login. */
     override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
         super.doUpdateVisitedHistory(view, url, isReload)
         val u = Uri.parse(url ?: return)
-        if (u.isSameOrigin(app) && WebRoutes.isLoginRoute(u.path, AppConfig.START_PATH)) {
+        if (u.isSameOrigin(ui) && WebRoutes.isLoginRoute(u.path, AppConfig.START_PATH)) {
             Log.i(WolpApp.TAG, "web client went to ${u.path}: native login")
             host.onWebLoginRoute()
         }
     }
 
-    /** S1 §4.2: only the `X-Device-Deny` header counts, and only from app.<host>. */
+    /**
+     * S1 §4.2: only the `X-Device-Deny` header counts, and only from app.<host>. With the UI in the APK
+     * these are XHR/fetch responses (never the main frame): the header must be in the gateway's
+     * `Access-Control-Expose-Headers` only for the web app; the WebView reports it here regardless.
+     */
     override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
         super.onReceivedHttpError(view, request, errorResponse)
         if (!request.url.isSameOrigin(app)) return

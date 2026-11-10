@@ -10,16 +10,24 @@ import org.wolpmessenger.devicetrust.api.RaspReaction
 /** Build-time configuration (wolp.* Gradle properties → BuildConfig; one source, plan A4/A5). */
 object AppConfig {
     val enrollUrl: String = BuildConfig.ENROLL_URL
+    /** The API host (mTLS): XHR, WebSocket, Kratos. Never the main frame (security/09). */
     val appUrl: String = BuildConfig.APP_URL
 
-    /** `scheme://host[:port]` of [appUrl]: the only origin allowed to call plugins (S1 §5). */
-    val appOrigin: String = originOf(appUrl)
+    /**
+     * The packaged UI (security/09-ui-in-apk.md): Capacitor serves assets/public as `https://<uiHost>/`
+     * without touching the network. Same site as [appUrl], so the Kratos cookie reaches the APIs; the
+     * only origin allowed to call plugins (S1 §5).
+     */
+    val uiHost: String = BuildConfig.UI_HOST
+    val uiOrigin: String = "https://$uiHost"
+    /** Web client entry point: the root of the packaged UI (messenger-ui app build, base `/`). */
+    val uiUrl: String = "$uiOrigin/"
     val serverPins: List<String> = BuildConfig.SERVER_PINS.split(',').filter { it.isNotEmpty() }
     val expectedSigningDigests: List<String> = BuildConfig.EXPECTED_SIGNING_DIGESTS.split(',').filter { it.isNotEmpty() }
     val buildKind: BuildKind = BuildKind.valueOf(BuildConfig.BUILD_KIND)
 
-    /** Web client entry point (ADR-0001 п. 1: server.url has no path, the path is appStartPath). */
-    const val START_PATH = "/messenger-ui/"
+    /** Router base of the app build (WebRoutes). */
+    const val START_PATH = "/"
 
     fun deviceTrust(): DeviceTrustConfig = DeviceTrustConfig(
         enrollBaseUrl = enrollUrl,

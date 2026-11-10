@@ -8,15 +8,15 @@ import com.getcapacitor.BridgeWebChromeClient
 
 /**
  * S1 §4.4. Capacitor's client asks for CAMERA / RECORD_AUDIO and then grants whatever the page
- * requested, from any origin. Here only `https://app.<host>` gets only audio/video capture; the file
+ * requested, from any origin. Here only the packaged UI (`https://<uiHost>`) gets only audio/video capture; the file
  * chooser (photo, video, voice, files from Composer) stays Capacitor's.
  */
 class WolpWebChromeClient(bridge: Bridge) : BridgeWebChromeClient(bridge) {
-    private val app = Uri.parse(AppConfig.appUrl)
+    private val ui = Uri.parse(AppConfig.uiOrigin)
 
     override fun onPermissionRequest(request: PermissionRequest) {
         val resources = request.resources.toList()
-        if (!request.origin.isSameOrigin(app) || resources.isEmpty() || !resources.all { it in ALLOWED }) {
+        if (!request.origin.isSameOrigin(ui) || resources.isEmpty() || !resources.all { it in ALLOWED }) {
             Log.w(WolpApp.TAG, "webview permission denied: $resources for ${request.origin}")
             request.deny()
             return

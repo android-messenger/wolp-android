@@ -15,7 +15,9 @@ app/
 git submodule update --init
 cd app && npm ci && cd android
 export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME нужен и включённой сборке S2
-../tools/stand-config.sh                                       # стенд: хосты localhost:9443/9444, пины, корень стенда
+../tools/stand-config.sh                                       # стенд: хосты localhost:9443/9444, пины, корень стенда, uiHost
+(cd ../../../../messenger/front && VITE_API_ORIGIN=https://localhost:9444 VITE_TURN_HOST=localhost \
+  VITE_MESSENGER_ADMIN_KEY=stand-messenger-admin-key npm run build:app)   # UI в APK (wolp.uiDist)
 ./gradlew :app:assembleProductDebug
 ```
 `-Pwolp.deviceTrustDir=../../../wolp-device-trust` — собрать против рабочей копии S2 вместо сабмодуля.
@@ -23,7 +25,9 @@ export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME н�
 ## Конфигурация (Gradle-свойства `wolp.*`)
 | Свойство | Значение |
 |---|---|
-| `wolp.enrollUrl`, `wolp.appUrl` | `https://enroll.<host>`, `https://app.<host>` — без пути. Источник для `DeviceTrustConfig`, `server.url` Capacitor и NSC |
+| `wolp.enrollUrl`, `wolp.appUrl` | `https://enroll.<host>`, `https://app.<host>` — без пути. Источник для `DeviceTrustConfig` и NSC; `appUrl` — хост API для упакованного UI |
+| `wolp.uiHost` | имя хоста локального origin UI `https://<uiHost>` (Capacitor `hostname`, `security/09`). **Same-site** с хостом `appUrl` (иначе cookie Kratos не дойдёт до API) и **не** хост, к которому приложение ходит по сети на 443 (Capacitor перехватил бы его). Стенд — `localhost`; прод — несуществующий поддомен того же сайта, например `ui.hormi.isolutions.io` (сам `hormi.isolutions.io` занят presigned-ссылками вложений на `:443`). Проверяет `validateWolpConfig` |
+| `wolp.uiDist` | каталог app-сборки `messenger-ui` (`VITE_API_ORIGIN=<wolp.appUrl> npm run build:app`), по умолчанию `../../../messenger/front/dist-app` (соседний клон). `bundle<Variant>WebUi` копирует его в `assets/public`, отказывает, если сборка сделана для другого API origin, и не берёт `push-sw.js`/`*.map`/`stats.html` |
 | `wolp.serverPins` | `sha256/…,sha256/…` — основной и запасной ключ сервера (RUNBOOK шлюза, «серверные ключи TLS»). Из них же генерируется `<pin-set>` в `network_security_config.xml` (S1 §4.3) |
 | `wolp.extraTrustAnchor` | PEM, которому доверяют только debug-сборки (корень стенда) |
 | `wolp.expectedSigningDigests` | SHA-256 сертификата release-подписи; обязателен для release |
@@ -43,15 +47,15 @@ export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME н�
 ## WebView (S1-3, S1 §4)
 | Где | Что |
 |---|---|
-| `WolpWebViewClient` | клиентский сертификат только для `app.<host>` (`proceed`, иначе `ignore()` → `ensureFresh()`, перезагрузка не чаще раза в 30 с только при `Active`); `X-Device-Deny` только с `app.<host>` → `web/DenyPolicy` (JVM-тесты); 401 на документе `app` **без** заголовка (окно кэша `check`, HANDOFF вопрос 8) → `CHECK_SESSION`: сессию спрашиваем у самого Kratos (`whoami` шлюза отвечает из того же кэша), нет — вход; `onReceivedSslError` → `cancel()` и «не удалось проверить сервер»; `onRenderProcessGone` → `true` |
-| `WolpWebChromeClient` | камера/микрофон — только `https://app.<host>` и только `AUDIO/VIDEO_CAPTURE`; выбор файлов — Capacitor |
+| `WolpWebViewClient` | главный фрейм — только UI из APK и `enroll`; переход документа на `app.<host>` запрещается (`security/09`: сервер не получает фрейм с мостом); клиентский сертификат только для `app.<host>` (`proceed`, иначе `ignore()` → `ensureFresh()`, перезагрузка не чаще раза в 30 с только при `Active`); `X-Device-Deny` только с `app.<host>` → `web/DenyPolicy` (JVM-тесты); 401 на документе `app` **без** заголовка (окно кэша `check`, HANDOFF вопрос 8) → `CHECK_SESSION`: сессию спрашиваем у самого Kratos (`whoami` шлюза отвечает из того же кэша), нет — вход; `onReceivedSslError` → `cancel()` и «не удалось проверить сервер»; `onRenderProcessGone` → `true` |
+| `WolpWebChromeClient` | камера/микрофон — только упакованный UI `https://<uiHost>` и только `AUDIO/VIDEO_CAPTURE`; выбор файлов — Capacitor |
 | `MainActivity` | `credentialsVersion` → `clearClientCertPreferences` (последнее обработанное значение — `SharedPreferences`); смена состояния S2 и возврат после > 5 мин в фоне → порядок §3 (`Messenger` — без перезагрузки, иначе `SplashActivity`); ping при `onResume` и раз в 5 мин; `USER_MISMATCH` → `checkSessionBinding` → выход из Kratos и экран «другой пользователь»; «Назад» — `history.back()`, в корне — в фон; VaultReset — скрипт `DOCUMENT_START` удаляет `e2ee-signal`/`e2ee-device`/`e2ee-plaintext` и подтверждает через `WebMessageListener` |
 | вставки | плагин Capacitor `SystemBars` (`insetsHandling: css`): `env(safe-area-inset-*)` при `viewport-fit=cover` на WebView ≥ 140, иначе переменные `--safe-area-inset-*` |
 
 ## Плагины (S1-4, S1 §5)
 | Где | Что |
 |---|---|
-| `web/BridgeGuard` | заменяет `WebMessageListener` моста Capacitor (`androidBridge`) своим: только главный фрейм ровно `app.<host>` (`sourceOrigin`, `isMainFrame`), остальным — ответ `PERMISSION_DENIED` (промис отклоняется, а не висит, как было у Capacitor из iframe). Ставится из `load()` плагина — Capacitor вызывает его до загрузки `server.url`. Канал ответа Capacitor хранит в приватном поле `MessageHandler` — его и `Bridge.msgHandler` R8 не трогает (`proguard-rules.pro`); если поставить не удалось — плагины закрыты |
+| `web/BridgeGuard` | заменяет `WebMessageListener` моста Capacitor (`androidBridge`) своим: только главный фрейм ровно упакованного UI `https://<uiHost>` (`sourceOrigin`, `isMainFrame`), остальным — ответ `PERMISSION_DENIED` (промис отклоняется, а не висит, как было у Capacitor из iframe). Ставится из `load()` плагина — Capacitor вызывает его до загрузки UI. Канал ответа Capacitor хранит в приватном поле `MessageHandler` — его и `Bridge.msgHandler` R8 не трогает (`proguard-rules.pro`); если поставить не удалось — плагины закрыты |
 | `web/BridgePolicy`, `CallOrigins` | правило origin (JVM-тесты) и запись origin каждого пропущенного вызова по `callbackId`: плагин в начале каждого метода берёт запись и сверяет сам; нет записи (мост ушёл на `JavascriptInterface`, вызов мимо защиты) — отказ |
 | `plugins/DeviceTrustPlugin` | `getState` (`{state, notAfter?}`), `getDeviceInfo` (`securityLevel` только если S2 знает его из предпроверки этого процесса; `deviceId` S2 наружу не отдаёт), `vaultWrap/Unwrap` — base64, назначения только `e2ee`/`e2ee-plaintext` (`web/JsDeviceTrust`, JVM-тесты); ошибки — `PERMISSION_DENIED`, `INVALID_ARGUMENT`, `VAULT_KEY_GONE`, `VAULT_LOCKED`, `VAULT_CORRUPT`, `UNAVAILABLE`; входные и выходные байты затираются |
 

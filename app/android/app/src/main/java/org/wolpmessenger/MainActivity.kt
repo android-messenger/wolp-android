@@ -49,8 +49,8 @@ class MainActivity : BridgeActivity(), WebHost {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         config = CapConfig.Builder(this)
-            .setServerUrl(AppConfig.appUrl)          // no path (ADR-0001 п. 1, P1-b)
-            .setStartPath(AppConfig.START_PATH)
+            // security/09: the UI comes from the APK (assets/public) as https://<uiHost>/, no server.url
+            .setHostname(AppConfig.uiHost)
             .setAndroidScheme("https")
             .setAllowNavigation(arrayOf())           // enroll is allowed by WolpWebViewClient, not here
             .setAllowMixedContent(false)
@@ -181,7 +181,7 @@ class MainActivity : BridgeActivity(), WebHost {
         if (leaving) return
         lifecycleScope.launch {
             if (Gateway.hasSession()) {
-                bridge.webView.loadUrl(AppConfig.appUrl + AppConfig.START_PATH)
+                bridge.webView.loadUrl(AppConfig.uiUrl)
             } else {
                 WebView.clearClientCertPreferences(null)
                 leave()
@@ -196,11 +196,11 @@ class MainActivity : BridgeActivity(), WebHost {
         leave()
     }
 
-    /** S1 §3 VaultReset: drop the web app's E2EE stores before its first script on app.<host>. */
+    /** S1 §3 VaultReset: drop the web app's E2EE stores before its first script on the UI origin. */
     private fun applyVaultReset() {
         Log.i(WolpApp.TAG, "vault reset: clearing ${WebData.E2EE_DATABASES} before the web app loads")
         val wv = bridge.webView
-        val origins = setOf(AppConfig.appOrigin)
+        val origins = setOf(AppConfig.uiOrigin)
         WebViewCompat.addWebMessageListener(wv, WebData.VAULT_RESET_LISTENER, origins) { _, message, _, isMainFrame, _ ->
             if (!isMainFrame || message.data != "done" || vaultResetScript == null) return@addWebMessageListener
             vaultResetScript?.remove()
@@ -211,7 +211,7 @@ class MainActivity : BridgeActivity(), WebHost {
         }
         vaultResetScript = WebViewCompat.addDocumentStartJavaScript(wv, WebData.vaultResetScript, origins)
         // the Bridge's first load may already be under way without the script: start it over
-        wv.loadUrl(AppConfig.appUrl + AppConfig.START_PATH)
+        wv.loadUrl(AppConfig.uiUrl)
     }
 
     private companion object {

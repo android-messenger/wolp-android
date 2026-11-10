@@ -36,12 +36,12 @@ docs/adr/               архитектурные решения (ADR-0001 — 
 | `SplashActivity`, `launch/LaunchGate` | порядок проверок при запуске (S1 §3), экраны Compose (`ui/Screens`) |
 | `LoginActivity` | вход в Kratos в обычной WebView **без** моста |
 | `MainActivity`, `WolpWebViewClient`, `WolpWebChromeClient` | Capacitor `Bridge`, клиентский сертификат, `X-Device-Deny`, разрешения, «Назад», VaultReset |
-| `web/BridgeGuard`, `web/BridgePolicy` | защита моста: только главный фрейм `app.<host>` |
+| `web/BridgeGuard`, `web/BridgePolicy` | защита моста: только главный фрейм упакованного UI (`https://<uiHost>`) |
 | `plugins/DeviceTrustPlugin` | `getState`, `getDeviceInfo`, `vaultWrap`/`vaultUnwrap` |
 
 ## Как работает приложение
 
-Текущее состояние: интерфейс `messenger-ui` загружается **с сервера** (`server.url` Capacitor = `https://app.<host>`, путь `/messenger-ui/`).
+Интерфейс `messenger-ui` **упакован в APK** (app-сборка `messenger-ui`, `security/09-ui-in-apk.md`): Capacitor отдаёт `assets/public` как `https://<uiHost>/` без сети; API, WebSocket и Kratos — на `https://app.<host>` (mTLS, cookie Kratos, CORS для origin UI). `server.url` не используется.
 
 ```mermaid
 flowchart TD
