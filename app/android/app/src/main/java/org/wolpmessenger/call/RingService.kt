@@ -37,6 +37,7 @@ class RingService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private var ringtone: Ringtone? = null
     private var call: IncomingCall? = null
+    private var declining = false
     private val timeout = Runnable { finish(Outcome.MISSED) }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -47,7 +48,7 @@ class RingService : Service() {
             ACTION_ACCEPT -> finish(Outcome.ACCEPTED)
             ACTION_DECLINE -> finish(Outcome.DECLINED)
             ACTION_CANCEL -> if (intent.getStringExtra(EXTRA_CONVERSATION) == call?.conversationId) finish(Outcome.MISSED)
-            else -> if (call == null) stopSelf()
+            else -> stopIfIdle()
         }
         return START_NOT_STICKY
     }
@@ -72,10 +73,10 @@ class RingService : Service() {
         if (!Notifier(this).canUseFullScreenIntent()) Notifier(this).fullScreenHint()
     }
 
-    private fun stopIfIdle() { if (call == null) stopSelf() }
+    private fun stopIfIdle() { if (call == null && !declining) stopSelf() }
 
     private fun finish(outcome: Outcome) {
-        val c = call ?: return stopSelf()
+        val c = call ?: return run { if (!declining) stopSelf() }
         call = null
         main.removeCallbacks(timeout)
         stopRinging()
@@ -84,14 +85,31 @@ class RingService : Service() {
         when (outcome) {
             Outcome.ACCEPTED -> Unit // IncomingCallActivity opens the messenger with the deep link
             Outcome.DECLINED -> {
-                // the decline outlives the service: the process stays alive for the ≤ 5 s socket
-                (application as WolpApp).scope.launch { NativeDecline.decline(c) }
+                // Stay a foreground service until the ≤ 5 s decline socket is done: a background
+                // process loses the network under battery saver / Doze, and could be killed meanwhile.
+                startForeground(ID, declinedNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
+                declining = true
+                (application as WolpApp).scope.launch {
+                    NativeDecline.decline(c)
+                    declining = false
+                    if (call == null) { // a new push call may have started ringing meanwhile
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+                }
+                return
             }
             Outcome.MISSED -> Notifier(this).missedCall(c.conversationId, c.callerName)
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
+
+    private fun declinedNotification(): Notification = Notification.Builder(this, Notifier.CH_ONGOING)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setContentTitle("Звонок отклонён")
+        .setCategory(Notification.CATEGORY_CALL)
+        .build()
 
     override fun onDestroy() {
         main.removeCallbacks(timeout)
