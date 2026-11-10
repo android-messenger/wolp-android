@@ -30,6 +30,7 @@ export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME н�
 | `wolp.uiDist` | каталог app-сборки `messenger-ui` (`VITE_API_ORIGIN=<wolp.appUrl> npm run build:app`), по умолчанию `../../../messenger/front/dist-app` (соседний клон). `bundle<Variant>WebUi` копирует его в `assets/public`, отказывает, если сборка сделана для другого API origin, и не берёт `push-sw.js`/`*.map`/`stats.html` |
 | `wolp.serverPins` | `sha256/…,sha256/…` — основной и запасной ключ сервера (RUNBOOK шлюза, «серверные ключи TLS»). Из них же генерируется `<pin-set>` в `network_security_config.xml` (S1 §4.3) |
 | `wolp.extraTrustAnchor` | PEM, которому доверяют только debug-сборки (корень стенда) |
+| `wolp.googleServices` | `google-services.json` проекта Firebase (S1 §7.1). Из файла при сборке берутся `project_id`, `mobilesdk_app_id`, `api_key` и `project_number` (в `BuildConfig`). Сам файл в репозиторий не попадает; плагин google-services не используется, Firebase инициализируется вручную, только messaging. Без файла push выключен; release-сборка без него отклоняется (`verify*BuildKind`). Владелец держит файл в `~/wolp-keys/google-services.json` |
 | `wolp.expectedSigningDigests` | SHA-256 сертификата release-подписи; обязателен для release |
 | `wolp.signing.*` | `storeFile`, `storePassword`, `keyAlias`, `keyPassword` — release-ключ (v2+v3) |
 | `wolp.productVersionCode`, `wolp.pilotVersionCode` | по умолчанию 10000 и 9990 (`MMmmpp`, пилот `pp` 90–99 — перед релизом, S2 §7.3) |

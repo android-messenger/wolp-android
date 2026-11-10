@@ -3,8 +3,11 @@ package org.wolpmessenger
 import android.net.Uri
 import android.util.Log
 import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebView
 import com.getcapacitor.Bridge
 import com.getcapacitor.BridgeWebChromeClient
+import org.wolpmessenger.push.PushState
 
 /**
  * S1 §4.4. Capacitor's client asks for CAMERA / RECORD_AUDIO and then grants whatever the page
@@ -21,7 +24,18 @@ class WolpWebChromeClient(bridge: Bridge) : BridgeWebChromeClient(bridge) {
             request.deny()
             return
         }
+        PushState.hold(PushState.HOLD_PERMISSION, 60_000) // S1 §7.0: the system dialog is not "background"
         super.onPermissionRequest(request) // runtime permissions, then grant(resources) or deny()
+    }
+
+    /** S1 §7.0: the system file chooser / camera must not close the web app's WebSocket. */
+    override fun onShowFileChooser(webView: WebView, filePathCallback: ValueCallback<Array<Uri>>, fileChooserParams: FileChooserParams): Boolean {
+        PushState.hold(PushState.HOLD_FILE_CHOOSER, 10 * 60_000L)
+        val wrapped = ValueCallback<Array<Uri>> { result ->
+            PushState.release(PushState.HOLD_FILE_CHOOSER)
+            filePathCallback.onReceiveValue(result)
+        }
+        return super.onShowFileChooser(webView, wrapped, fileChooserParams).also { if (!it) PushState.release(PushState.HOLD_FILE_CHOOSER) }
     }
 
     private companion object {

@@ -28,6 +28,9 @@ import org.wolpmessenger.launch.LaunchGate
 import org.wolpmessenger.launch.Screen
 import org.wolpmessenger.plugins.DeviceTrustPlugin
 import org.wolpmessenger.plugins.FilesPlugin
+import org.wolpmessenger.plugins.PushPlugin
+import org.wolpmessenger.push.BackgroundController
+import org.wolpmessenger.push.NotificationTap
 import org.wolpmessenger.web.DenyAction
 import org.wolpmessenger.web.WebData
 
@@ -47,6 +50,12 @@ class MainActivity : BridgeActivity(), WebHost {
     private var stoppedAt = 0L
     private var lastCertReload = 0L
     private var vaultResetScript: ScriptHandler? = null
+    private val pushPlugin: PushPlugin? get() = bridge?.getPlugin("Push")?.instance as? PushPlugin
+    private val background = BackgroundController(
+        plugin = { pushPlugin },
+        park = { bridge?.webView?.loadUrl("about:blank") },
+        unpark = { bridge?.webView?.loadUrl(AppConfig.uiUrl) },
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         config = CapConfig.Builder(this)
@@ -61,11 +70,15 @@ class MainActivity : BridgeActivity(), WebHost {
         secureWindow()
         registerPlugin(DeviceTrustPlugin::class.java) // its load() installs the bridge guard (S1 §5)
         registerPlugin(FilesPlugin::class.java)       // S1 §5.4: saving attachments
+        registerPlugin(PushPlugin::class.java)        // S1 §5.2, §7.0
         super.onCreate(savedInstanceState)
         // Installed synchronously after Bridge.create(): the first load's callbacks arrive later on the main looper.
         bridge.webViewClient = WolpWebViewClient(bridge, this)
         bridge.webView.webChromeClient = WolpWebChromeClient(bridge) // registers its launchers: before STARTED
         if (WebData.vaultResetPending(this)) applyVaultReset()
+        pushPlugin?.onWsClosed = background::onWsClosed
+        background.attach()
+        deliverTap(intent)
 
         // S1 §4.4 «Назад»: history.back(), at the root — to the background
         onBackPressedDispatcher.addCallback(this) {
@@ -93,6 +106,23 @@ class MainActivity : BridgeActivity(), WebHost {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        deliverTap(intent)
+    }
+
+    override fun onDestroy() {
+        background.detach()
+        super.onDestroy()
+    }
+
+    /** A notification tap (via SplashActivity) → `notificationTap`, retained until the web app listens. */
+    private fun deliverTap(intent: Intent?) {
+        val tap = NotificationTap.from(intent?.data) ?: return
+        intent?.data = null
+        pushPlugin?.emitTap(tap)
     }
 
     override fun onStop() {

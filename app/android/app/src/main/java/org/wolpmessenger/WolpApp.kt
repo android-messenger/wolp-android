@@ -6,6 +6,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.wolpmessenger.push.EventDedup
+import org.wolpmessenger.push.Fcm
+import org.wolpmessenger.push.NameCache
+import org.wolpmessenger.push.Notifier
+import org.wolpmessenger.push.PushKeys
+import java.io.File
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustEvent
 import org.wolpmessenger.launch.Wipe
@@ -19,6 +26,8 @@ class WolpApp : Application() {
         super.onCreate()
         Wipe.wipePendingWebViewDir(this) // before anything creates a WebView
         DeviceTrust.init(this, AppConfig.deviceTrust())
+        Fcm.init(this)                    // S1 §7.1: messaging only, no auto-init
+        Notifier(this).ensureChannels()
         // The single subscriber of the process (API.md §5): events emitted by the start-up
         // reconciliation before this line are buffered, not lost.
         scope.launch { DeviceTrust.events.collect(::onTrustEvent) }
@@ -29,12 +38,30 @@ class WolpApp : Application() {
         Log.i(TAG, "trust event $e")
         when (e) {
             // S1 §3: wipe on entering Blocked and on every start while blocked (the screen follows the state)
-            is TrustEvent.Blocked -> Wipe.onBlocked(this)
+            is TrustEvent.Blocked -> {
+                Wipe.onBlocked(this)
+                scope.launch { wipePush() }
+            }
             // S1 §3 VaultReset: MainActivity clears the web app's E2EE stores before app.<host> runs any
             // script (the event comes from start-up reconciliation, before the messenger opens).
-            // Names cache and Push.register() join with S1-7.
-            TrustEvent.VaultReset -> WebData.markVaultReset(this)
+            // The push key and the names cache were Vault-wrapped too: drop them; the web app's next
+            // Push.register() makes a new key for the token.
+            TrustEvent.VaultReset -> {
+                WebData.markVaultReset(this)
+                PushKeys(this).clear()
+                NameCache(this).clear()
+            }
         }
+    }
+
+    /** security/11 §3: on Blocked the FCM token goes and nothing push-related stays on the device. */
+    private suspend fun wipePush() {
+        Notifier(this).cancelAll()
+        PushKeys(this).clear()
+        NameCache(this).clear()
+        EventDedup(File(noBackupFilesDir, "push-events.txt")).clear()
+        withContext(Dispatchers.IO) { Fcm.deleteToken() }
+        Log.i(TAG, "wipe: push token and keys removed")
     }
 
     companion object {

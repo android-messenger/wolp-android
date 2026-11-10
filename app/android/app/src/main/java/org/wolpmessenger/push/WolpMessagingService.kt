@@ -1,0 +1,58 @@
+package org.wolpmessenger.push
+
+import android.util.Log
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
+import org.wolpmessenger.WolpApp
+import org.wolpmessenger.devicetrust.DeviceTrust
+import org.wolpmessenger.devicetrust.api.TrustState
+import java.io.File
+import java.time.Instant
+
+/**
+ * FCM entry point (S1 §7.1). Not exported; the library's exported receiver delivers to it. Both
+ * callbacks run on a background thread with a time budget, hence runBlocking with timeouts.
+ */
+class WolpMessagingService : FirebaseMessagingService() {
+    private val dedup by lazy { EventDedup(File(noBackupFilesDir, "push-events.txt")) }
+
+    override fun onMessageReceived(message: RemoteMessage) {
+        val data = message.data
+        if (!PushPayload.isOurs(data)) return
+        // S2 Blocked: drop before touching any key (security/11 §3)
+        val blocked = DeviceTrust.state.value is TrustState.Blocked
+        val envelope = if (blocked) null else runBlocking {
+            withTimeoutOrNull(5_000) {
+                runCatching { PushKeys(this@WolpMessagingService).current() }.getOrNull()?.let { key ->
+                    try { PushPayload.open(key, data) } finally { key.fill(0) }
+                }
+            }
+        }
+        val action = PushRules.decide(
+            blocked = blocked,
+            envelope = envelope,
+            firstSeen = dedup::firstSeen,
+            foregroundConversation = PushState.foregroundConversation,
+            serverNow = DeviceTrust.trustNow(),
+            deviceNow = Instant.now(),
+        )
+        Log.i(WolpApp.TAG, "push: ${action::class.simpleName}")
+        val notifier = Notifier(this)
+        when (action) {
+            PushAction.Drop -> Unit
+            PushAction.Generic -> notifier.message(null, null)
+            is PushAction.Message -> notifier.message(action.conversationId, name(action.senderId))
+            is PushAction.Call -> notifier.call(action.conversationId, action.callerId, action.media, name(action.callerId))
+            is PushAction.CancelCall -> notifier.cancelCall(action.conversationId)
+        }
+    }
+
+    override fun onNewToken(token: String) {
+        Log.i(WolpApp.TAG, "push: new FCM token")
+        runBlocking { withTimeoutOrNull(20_000) { PushRegistrar(this@WolpMessagingService).register(token) } }
+    }
+
+    private fun name(id: String?): String? = runBlocking { withTimeoutOrNull(2_000) { NameCache(this@WolpMessagingService).name(id) } }
+}

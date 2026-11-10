@@ -18,6 +18,8 @@
 //   wolp.expectedSigningDigests          sha256 hex of the release signing certificate(s), comma separated
 //   wolp.signing.{storeFile,storePassword,keyAlias,keyPassword}
 //   wolp.productVersionCode / wolp.pilotVersionCode, wolp.minWebViewMajor
+//   wolp.googleServices                  google-services.json of the Firebase project (S1 §7.1, FCM only). Read at
+//                                        build time into BuildConfig; the file is never committed. Unset → push off
 import java.io.File
 import java.net.URI
 import java.security.KeyStore
@@ -43,6 +45,26 @@ val extraTrustAnchor = prop("wolp.extraTrustAnchor")?.let { rootProject.file(it)
 val uiHost = prop("wolp.uiHost")?.trim()?.lowercase()
 val uiDist = rootProject.file(prop("wolp.uiDist") ?: "../../../messenger/front/dist-app")
 val minWebViewMajor = prop("wolp.minWebViewMajor")?.toInt() ?: 113
+
+/** FCM options from google-services.json (no google-services plugin: only messaging is initialised, S1 §7.1). */
+data class Fcm(val projectId: String, val appId: String, val apiKey: String, val senderId: String)
+
+val fcm: Fcm? = prop("wolp.googleServices")?.let { path ->
+    val f = rootProject.file(path)
+    check(f.isFile) { "wolp.googleServices: no file $f" }
+    @Suppress("UNCHECKED_CAST")
+    val json = groovy.json.JsonSlurper().parse(f) as Map<String, Any?>
+    val project = json["project_info"] as Map<String, Any?>
+    val client = (json["client"] as List<Map<String, Any?>>).firstOrNull {
+        ((it["client_info"] as Map<String, Any?>)["android_client_info"] as Map<String, Any?>)["package_name"] == "org.wolpmessenger"
+    } ?: error("wolp.googleServices: no client for org.wolpmessenger in $f")
+    Fcm(
+        projectId = project["project_id"] as String,
+        appId = (client["client_info"] as Map<String, Any?>)["mobilesdk_app_id"] as String,
+        apiKey = ((client["api_key"] as List<Map<String, Any?>>).first())["current_key"] as String,
+        senderId = project["project_number"] as String,
+    )
+}
 
 fun configProblems(): List<String> = buildList {
     for ((n, v) in listOf("wolp.enrollUrl" to enrollUrl, "wolp.appUrl" to appUrl)) {
@@ -113,6 +135,10 @@ android {
         buildConfigField("String", "SERVER_PINS", "\"${serverPins.joinToString(",")}\"")
         buildConfigField("String", "EXPECTED_SIGNING_DIGESTS", "\"${expectedDigests.joinToString(",")}\"")
         buildConfigField("int", "MIN_WEBVIEW_MAJOR", minWebViewMajor.toString())
+        buildConfigField("String", "FCM_PROJECT_ID", "\"${fcm?.projectId.orEmpty()}\"")
+        buildConfigField("String", "FCM_APP_ID", "\"${fcm?.appId.orEmpty()}\"")
+        buildConfigField("String", "FCM_API_KEY", "\"${fcm?.apiKey.orEmpty()}\"")
+        buildConfigField("String", "FCM_SENDER_ID", "\"${fcm?.senderId.orEmpty()}\"")
     }
     buildFeatures {
         buildConfig = true
@@ -174,11 +200,13 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.firebase:firebase-messaging:26.0.1") // S1 §7.1: only messaging
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20260814") // real org.json for JVM tests (android.jar has stubs)
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 
@@ -327,6 +355,7 @@ androidComponents {
                     else if (signer !in expected) add("signing certificate $signer is not in wolp.expectedSigningDigests $expected")
                     if (expected.isEmpty()) add("wolp.expectedSigningDigests empty: DeviceTrust.init() rejects a non-debuggable app without them")
                     for (h in hosts) if (h == "localhost" || h == "127.0.0.1") add("release build points at the stand host $h")
+                    if (fcm == null) add("wolp.googleServices not set: a release build without push (S1 §7.1)")
                 }
                 check(problems.isEmpty()) { "verify${cap}BuildKind:\n  " + problems.joinToString("\n  ") }
                 logger.lifecycle("verify${cap}BuildKind: OK (${channel.buildKind}, versionCode $vc, dryRun ${channel.dryRun}, signer ${signer?.take(16)}…)")
