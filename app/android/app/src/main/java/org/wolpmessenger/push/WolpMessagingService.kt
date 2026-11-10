@@ -34,7 +34,7 @@ class WolpMessagingService : FirebaseMessagingService() {
             blocked = blocked,
             envelope = envelope,
             firstSeen = dedup::firstSeen,
-            foregroundConversation = PushState.foregroundConversation,
+            foregroundConversation = PushState.suppressedConversation(),
             serverNow = DeviceTrust.trustNow(),
             deviceNow = Instant.now(),
         )

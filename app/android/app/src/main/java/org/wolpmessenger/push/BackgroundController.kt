@@ -34,11 +34,13 @@ class BackgroundController(
 
     fun attach() = ProcessLifecycleOwner.get().lifecycle.addObserver(this)
     fun detach() {
+        PushState.appInForeground = false
         main.removeCallbacks(parkNow)
         ProcessLifecycleOwner.get().lifecycle.removeObserver(this)
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        PushState.appInForeground = true
         PushState.onForeground()
         main.removeCallbacks(parkNow)
         waiting = false
@@ -51,6 +53,7 @@ class BackgroundController(
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        PushState.appInForeground = false // a locked screen must not keep the open chat silent
         if (PushState.keepConnection()) {
             Log.i(WolpApp.TAG, "background: keeping the connection (system UI or call)")
             return

@@ -10,6 +10,12 @@ import android.os.SystemClock
 object PushState {
     @Volatile var foregroundConversation: String? = null
 
+    /** The whole app is in the foreground (ProcessLifecycleOwner, set by BackgroundController). */
+    @Volatile var appInForeground: Boolean = false
+
+    /** The conversation whose notifications are suppressed: only while the app is actually on screen. */
+    fun suppressedConversation(): String? = if (appInForeground) foregroundConversation else null
+
     private val holds = HashMap<String, Long>() // name → expiry (elapsedRealtime), Long.MAX_VALUE = until released
 
     @Synchronized
