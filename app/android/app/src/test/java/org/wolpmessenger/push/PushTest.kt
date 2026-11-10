@@ -67,10 +67,10 @@ class PushRulesTest {
 
     @Test fun callAge() {
         // limit with server time: 45 − 5 + 3 = 43 s
-        assertEquals(PushAction.Call("c1", "s1", null), decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:59:18Z")))
+        assertEquals(PushAction.Call("c1", "s1", null, "2026-11-10T11:59:18Z"), decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:59:18Z")))
         assertEquals(PushAction.Drop, decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:59:16Z")))
         // without server time: 45 − 5 + 30 = 70 s
-        assertEquals(PushAction.Call("c1", "s1", null), decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:59:00Z"), server = null))
+        assertEquals(PushAction.Call("c1", "s1", null, "2026-11-10T11:59:00Z"), decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:59:00Z"), server = null))
         assertEquals(PushAction.Drop, decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:58:40Z"), server = null))
         // unparsable ts → not dropped (the server already shortened the TTL)
         assertFalse(PushRules.callExpired("garbage", now, now))

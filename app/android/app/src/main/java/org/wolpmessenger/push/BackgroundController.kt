@@ -7,6 +7,8 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import org.wolpmessenger.WolpApp
+import org.wolpmessenger.call.CallState
+import org.wolpmessenger.call.WebWs
 
 /**
  * S1 §7.0: the backend pushes only to absent users, so the web app's WebSocket must close when the
@@ -15,6 +17,9 @@ import org.wolpmessenger.WolpApp
  * active ([PushState]), the web app gets `appBackground` and answers `wsClosed`; without an answer
  * within 3 s (JS throttled, or a UI without the listener) the WebView is parked on about:blank, which
  * closes every connection, and the UI is loaded again on the next foreground.
+ *
+ * It also keeps [CallState.webWs] (S1-6, §7.3 P1-i: a native decline socket only while the web app's
+ * is closed) and holds the return to the foreground while a native decline socket is open.
  */
 class BackgroundController(
     private val plugin: () -> org.wolpmessenger.plugins.PushPlugin?,
@@ -29,11 +34,17 @@ class BackgroundController(
         waiting = false
         Log.i(WolpApp.TAG, "background: no wsClosed within ${ACK_TIMEOUT_MS} ms, parking the WebView")
         parked = true
+        CallState.setWebWs(WebWs.CLOSED)
         park()
     }
 
-    fun attach() = ProcessLifecycleOwner.get().lifecycle.addObserver(this)
+    fun attach() {
+        CallState.setWebWs(WebWs.OPEN) // the Bridge loads the UI right away; it connects on its own
+        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
+    }
+
     fun detach() {
+        CallState.setWebWs(WebWs.CLOSED)
         PushState.appInForeground = false
         main.removeCallbacks(parkNow)
         ProcessLifecycleOwner.get().lifecycle.removeObserver(this)
@@ -45,11 +56,16 @@ class BackgroundController(
         main.removeCallbacks(parkNow)
         waiting = false
         if (!started) { started = true; return } // the catch-up event on attach is not a return from background
-        if (parked) {
-            parked = false
-            Log.i(WolpApp.TAG, "foreground: reloading the UI")
-            unpark()
-        } else plugin()?.emitForeground()
+        // §7.3: the web app reconnects only after a native decline socket has closed (no 4409 race)
+        CallState.afterNativeDecline {
+            if (!PushState.appInForeground) return@afterNativeDecline // went back to the background meanwhile
+            CallState.setWebWs(WebWs.OPEN)
+            if (parked) {
+                parked = false
+                Log.i(WolpApp.TAG, "foreground: reloading the UI")
+                unpark()
+            } else plugin()?.emitForeground()
+        }
     }
 
     override fun onStop(owner: LifecycleOwner) {
@@ -59,6 +75,7 @@ class BackgroundController(
             return
         }
         Log.i(WolpApp.TAG, "background: asking the web app to close its WebSocket")
+        if (CallState.webWs.value == WebWs.OPEN) CallState.setWebWs(WebWs.CLOSING)
         plugin()?.emitBackground()
         waiting = true
         main.postDelayed(parkNow, ACK_TIMEOUT_MS)
@@ -69,6 +86,7 @@ class BackgroundController(
         if (!waiting) return
         waiting = false
         main.removeCallbacks(parkNow)
+        CallState.setWebWs(WebWs.CLOSED)
         Log.i(WolpApp.TAG, "background: web app closed its WebSocket")
     }
 

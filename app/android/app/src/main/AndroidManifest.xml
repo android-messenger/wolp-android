@@ -12,6 +12,18 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- S1 §7.1: asked by Push.register() after enrollment -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- S1 §4.5, §7.3 (S1-6): ring FGS from FCM, call FGS from the web app, full-screen incoming call.
+         MANAGE_OWN_CALLS is what FGS type phoneCall requires of a non-dialer app (API 34+). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- asked at run time on the first call; without it there is no Bluetooth route (§4.5) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
@@ -53,6 +65,27 @@
             android:launchMode="singleTask"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- S1 §7.3: the only activity shown over the lock screen; no name there (D16), Accept asks for the unlock -->
+        <activity
+            android:name=".call.IncomingCallActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="org.wolpmessenger.call"
+            android:excludeFromRecents="true"
+            android:noHistory="false"
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|uiMode" />
+
+        <service
+            android:name=".call.RingService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall" />
+        <service
+            android:name=".call.CallService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone|camera" />
 
         <!-- S1 §7.1 FCM: not exported (the library's exported receiver delivers to it) -->
         <service
