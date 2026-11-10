@@ -24,8 +24,23 @@ class WolpWebChromeClient(bridge: Bridge) : BridgeWebChromeClient(bridge) {
             request.deny()
             return
         }
-        PushState.hold(PushState.HOLD_PERMISSION, 60_000) // S1 §7.0: the system dialog is not "background"
-        super.onPermissionRequest(request) // runtime permissions, then grant(resources) or deny()
+        // S1 §7.0: the system dialog is not "background" — but only until the request is answered
+        PushState.hold(PushState.HOLD_PERMISSION, 60_000)
+        super.onPermissionRequest(ReleasingRequest(request)) // runtime permissions, then grant(resources) or deny()
+    }
+
+    /** Ends the permission hold as soon as Capacitor answers the WebView's request. */
+    private class ReleasingRequest(private val r: PermissionRequest) : PermissionRequest() {
+        override fun getOrigin(): Uri = r.origin
+        override fun getResources(): Array<String> = r.resources
+        override fun grant(resources: Array<String>) {
+            PushState.release(PushState.HOLD_PERMISSION)
+            r.grant(resources)
+        }
+        override fun deny() {
+            PushState.release(PushState.HOLD_PERMISSION)
+            r.deny()
+        }
     }
 
     /** S1 §7.0: the system file chooser / camera must not close the web app's WebSocket. */
