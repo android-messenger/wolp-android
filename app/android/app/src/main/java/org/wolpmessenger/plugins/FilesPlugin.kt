@@ -23,6 +23,7 @@ import okhttp3.Request
 import org.wolpmessenger.AppConfig
 import org.wolpmessenger.WolpApp
 import org.wolpmessenger.devicetrust.DeviceTrust
+import org.wolpmessenger.push.PushState
 import org.wolpmessenger.web.BridgePolicy
 import org.wolpmessenger.web.CallOrigins
 import org.wolpmessenger.web.JsDeviceTrust
@@ -58,11 +59,13 @@ class FilesPlugin : Plugin() {
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType(mime)
             .putExtra(Intent.EXTRA_TITLE, JsFiles.fileName(call.getString("fileName")))
+        PushState.hold(PushState.HOLD_SAVE_DOCUMENT, 10 * 60_000L) // S1 §7.0
         startActivityForResult(call, intent, "onDocumentChosen")
     }
 
     @ActivityCallback
     private fun onDocumentChosen(call: PluginCall?, result: ActivityResult) {
+        PushState.release(PushState.HOLD_SAVE_DOCUMENT)
         call ?: return
         val target = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || target == null) {

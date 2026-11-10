@@ -1,0 +1,13 @@
+{
+  "key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  "sealed": "+lF+rxwJSifof2OKLEMo0F+zklqbcG30hawMSuiqxaEPx2EA4PPHaa4REYNw2TMZWAERp69kmhEBjvTDjcZDr2IZ9fvtmVP1ykYHlD04a5J1XebKE1s6v1ayKUo1W2tPNEyYEIlwzF/sHqOl4PRB/nL/Pn+Z1XUcaHwoYNR/0lQ67HIZKAwBqypLUJvf0BV0Jz6VJyaAfcpcoPLUNJsIcTw=",
+  "envelope": {
+    "type": "call",
+    "eventId": "e-1",
+    "conversationId": "c-1",
+    "messageId": "m-1",
+    "senderId": "s-1",
+    "media": "video",
+    "ts": "2026-11-10T12:00:00Z"
+  }
+}

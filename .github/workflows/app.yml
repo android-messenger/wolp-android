@@ -97,7 +97,16 @@ jobs:
           keytool -genkeypair -keystore "$RUNNER_TEMP/release.p12" -storetype PKCS12 -storepass ci-pass -keypass ci-pass \
             -alias wolp -keyalg EC -groupname secp256r1 -sigalg SHA256withECDSA -dname "CN=ci" -validity 30
           DIGEST=$(keytool -exportcert -keystore "$RUNNER_TEMP/release.p12" -storepass ci-pass -alias wolp | sha256sum | cut -d' ' -f1)
+          # a fake Firebase config: release builds refuse to build without push (S1 §7.1)
+          cat > "$RUNNER_TEMP/google-services.json" <<'JSON'
+          {"project_info":{"project_id":"ci","project_number":"1"},
+           "client":[{"client_info":{"mobilesdk_app_id":"1:1:android:1","android_client_info":{"package_name":"org.wolpmessenger"}},
+                      "api_key":[{"current_key":"ci"}]}]}
+          JSON
           SIGN="-Pwolp.signing.storeFile=$RUNNER_TEMP/release.p12 -Pwolp.signing.storePassword=ci-pass -Pwolp.signing.keyAlias=wolp -Pwolp.signing.keyPassword=ci-pass -Pwolp.expectedSigningDigests=$DIGEST"
+          if ./gradlew --no-daemon -q $WOLP $SIGN :app:verifyPilotReleaseBuildKind; then
+            echo "verifyPilotReleaseBuildKind accepted a release without wolp.googleServices"; exit 1; fi
+          SIGN="$SIGN -Pwolp.googleServices=$RUNNER_TEMP/google-services.json"
           ./gradlew --no-daemon $WOLP $SIGN :app:assembleProductRelease :app:assemblePilotRelease
           # refused: product in the pilot versionCode range; signer not in expectedSigningDigests; stand host
           if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.productVersionCode=10095 :app:verifyProductReleaseBuildKind; then
