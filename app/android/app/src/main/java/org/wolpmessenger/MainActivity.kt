@@ -23,6 +23,7 @@ import org.wolpmessenger.devicetrust.api.DenySource
 import org.wolpmessenger.devicetrust.api.GatewayCode
 import org.wolpmessenger.devicetrust.api.SessionBinding
 import org.wolpmessenger.devicetrust.api.TrustState
+import org.wolpmessenger.launch.MinVersion
 import org.wolpmessenger.launch.AndroidProbes
 import org.wolpmessenger.launch.LaunchGate
 import org.wolpmessenger.launch.Screen
@@ -146,8 +147,10 @@ class MainActivity : BridgeActivity(), WebHost {
     private suspend fun ping() {
         when (Gateway.ping()) {
             Gateway.Ping.ServerUnverified -> leave(SplashActivity.REASON_SERVER_UNVERIFIED)
+            // the gateway raised the minimum version: show «update» at once (S1 §3 step 4)
+            Gateway.Ping.Ok -> if (MinVersion.outdated()) leave()
             // offline: the web app shows its own state; denials already went to S2 and come back as a state change
-            Gateway.Ping.Offline, Gateway.Ping.Ok -> Unit
+            Gateway.Ping.Offline -> Unit
         }
     }
 

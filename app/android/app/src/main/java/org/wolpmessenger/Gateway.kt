@@ -10,6 +10,7 @@ import org.json.JSONObject
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.DenySource
 import org.wolpmessenger.devicetrust.api.GatewayCode
+import org.wolpmessenger.launch.MinVersion
 import java.io.IOException
 import javax.net.ssl.SSLPeerUnverifiedException
 
@@ -24,12 +25,14 @@ object Gateway {
 
     /**
      * `GET app/v1/device/ping` (S3 §5.8a: no Kratos session needed). Deny codes go to S2 as
-     * PINNED_CLIENT (the library decides, S2 §5.3); `X-Device-Renew: 1` starts `ensureFresh()`.
+     * PINNED_CLIENT (the library decides, S2 §5.3); `X-Device-Renew: 1` starts `ensureFresh()`;
+     * `X-Device-Min-App-Version` is remembered by [MinVersion].
      */
     suspend fun ping(): Ping = withContext(Dispatchers.IO) {
         try {
             DeviceTrust.okHttpClient().newCall(Request.Builder().url(AppConfig.appUrl + "/v1/device/ping").build()).execute().use { r ->
                 handleDeny(r)
+                if (r.code == 204) MinVersion.onPing(r.header(MinVersion.HEADER))
                 if (r.header("X-Device-Renew") == "1") DeviceTrust.ensureFresh()
                 Ping.Ok
             }

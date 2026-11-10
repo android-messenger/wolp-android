@@ -27,13 +27,14 @@ class LaunchGateTest {
         var session: Boolean = true,
         var afterFresh: TrustState? = null,
         var stateAfterPrecheck: TrustState? = null,
+        var updateAfterReach: Boolean? = null,
     ) : LaunchProbes {
         val calls = mutableListOf<String>()
         override fun trustState() = state
         override fun webViewUsable() = webView.also { calls += "webView" }
         override suspend fun precheck() = precheck.also { calls += "precheck"; stateAfterPrecheck?.let { state = it } }
         override suspend fun mandatoryUpdate() = update.also { calls += "update" }
-        override suspend fun reachable(enrolled: Boolean) = reach.also { calls += "reach(enrolled=$enrolled)" }
+        override suspend fun reachable(enrolled: Boolean) = reach.also { calls += "reach(enrolled=$enrolled)"; updateAfterReach?.let { update = it } }
         override suspend fun hasSession() = session.also { calls += "session" }
         override suspend fun ensureFresh(): TrustState { calls += "ensureFresh"; afterFresh?.let { state = it }; return state }
     }
@@ -82,6 +83,17 @@ class LaunchGateTest {
         val f = Fake(TrustState.ExpiredGrace(t), update = true, reach = Reachability.OFFLINE)
         assertEquals(Screen.Update(null), gate(f).evaluate())
         assertEquals(listOf("webView", "update"), f.calls)
+    }
+
+    @Test fun `5a minimum version brought by the ping of step 5`() = runTest {
+        val f = Fake(active, updateAfterReach = true)
+        assertEquals(Screen.Update(null), gate(f).evaluate())
+        assertEquals(listOf("webView", "update", "reach(enrolled=true)", "update"), f.calls)
+    }
+
+    @Test fun `5a not before enrollment`() = runTest {
+        val f = Fake(TrustState.NotEnrolled, updateAfterReach = true)
+        assertEquals(Screen.Onboarding(reEnroll = false), gate(f).evaluate())
     }
 
     @Test fun `4a UpdateRequired from the gateway`() = runTest {
@@ -146,6 +158,6 @@ class LaunchGateTest {
     @Test fun `9 Active goes straight to the messenger in order`() = runTest {
         val f = Fake(active)
         assertEquals(Screen.Messenger, gate(f).evaluate())
-        assertEquals(listOf("webView", "update", "reach(enrolled=true)", "session"), f.calls)
+        assertEquals(listOf("webView", "update", "reach(enrolled=true)", "update", "session"), f.calls)
     }
 }

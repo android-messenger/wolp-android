@@ -15,6 +15,7 @@ import org.wolpmessenger.push.PushKeys
 import java.io.File
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustEvent
+import org.wolpmessenger.launch.MinVersion
 import org.wolpmessenger.launch.Wipe
 import org.wolpmessenger.web.WebData
 
@@ -25,6 +26,7 @@ class WolpApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Wipe.wipePendingWebViewDir(this) // before anything creates a WebView
+        MinVersion.init(this)
         DeviceTrust.init(this, AppConfig.deviceTrust())
         Fcm.init(this)                    // S1 §7.1: messaging only, no auto-init
         Notifier(this).ensureChannels()
