@@ -10,6 +10,11 @@
 //   wolp.serverPins                      sha256/…,sha256/… — primary + backup server key (≥ 2); one source
 //                                        for DeviceTrustConfig.serverPins and the NSC <pin-set> (S1 §4.3)
 //   wolp.extraTrustAnchor                PEM file trusted for the app hosts in DEBUG builds only (stand root)
+//   wolp.uiHost                          host name of the packaged UI's local origin https://<uiHost> (security/09):
+//                                        same site as the app host (the Kratos cookie must reach the APIs),
+//                                        never a host:443 the app has to reach over the network
+//   wolp.uiDist                          messenger-ui app build (`npm run build:app`, VITE_API_ORIGIN = wolp.appUrl);
+//                                        default ../../../messenger/front/dist-app, i.e. a sibling clone
 //   wolp.expectedSigningDigests          sha256 hex of the release signing certificate(s), comma separated
 //   wolp.signing.{storeFile,storePassword,keyAlias,keyPassword}
 //   wolp.productVersionCode / wolp.pilotVersionCode, wolp.minWebViewMajor
@@ -35,6 +40,8 @@ val enrollUrl = prop("wolp.enrollUrl")
 val appUrl = prop("wolp.appUrl")
 val serverPins = prop("wolp.serverPins")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 val extraTrustAnchor = prop("wolp.extraTrustAnchor")?.let { rootProject.file(it) }
+val uiHost = prop("wolp.uiHost")?.trim()?.lowercase()
+val uiDist = rootProject.file(prop("wolp.uiDist") ?: "../../../messenger/front/dist-app")
 val minWebViewMajor = prop("wolp.minWebViewMajor")?.toInt() ?: 113
 
 fun configProblems(): List<String> = buildList {
@@ -45,6 +52,23 @@ fun configProblems(): List<String> = buildList {
     }
     if (serverPins.size < 2 || serverPins.any { !it.startsWith("sha256/") }) add("wolp.serverPins: ≥ 2 values sha256/<base64> (primary + backup)")
     if (extraTrustAnchor != null && !extraTrustAnchor.isFile) add("wolp.extraTrustAnchor: no file $extraTrustAnchor")
+    addAll(uiHostProblems())
+    if (!uiDist.resolve("index.html").isFile) add("wolp.uiDist: no index.html in $uiDist (messenger-ui: VITE_API_ORIGIN=<wolp.appUrl> npm run build:app)")
+}
+
+/** Last two labels: enough for the hosts we use (no multi-label public suffixes such as co.uk). */
+fun siteOf(host: String): String = if (host == "localhost" || host.all { it.isDigit() || it == '.' }) host else host.split('.').takeLast(2).joinToString(".")
+
+/** security/09 §5: the packaged UI's origin https://<uiHost> must be same-site with app and not shadow a real host. */
+fun uiHostProblems(): List<String> = buildList {
+    if (uiHost == null) { add("wolp.uiHost is not set (stand: localhost; see app/README.md)"); return@buildList }
+    if (!Regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$").matches(uiHost)) add("wolp.uiHost must be a bare host name: $uiHost")
+    val app = appUrl?.let { runCatching { URI(it) }.getOrNull() } ?: return@buildList
+    if (siteOf(uiHost) != siteOf(app.host)) add("wolp.uiHost $uiHost is not same-site with ${app.host}: the Kratos session cookie would not reach the APIs")
+    // Capacitor serves https://<uiHost> (port 443) from the APK: a host the app reaches on 443 would vanish
+    for (u in listOfNotNull(appUrl, enrollUrl).mapNotNull { runCatching { URI(it) }.getOrNull() }) {
+        if (u.host == uiHost && (u.port == -1 || u.port == 443)) add("wolp.uiHost $uiHost would shadow $u (choose a host the app never reaches over the network)")
+    }
 }
 
 /** One place for the S2 §7.3 parameters of each flavor; BuildConfig and the verification read it. */
@@ -85,6 +109,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ENROLL_URL", "\"${enrollUrl.orEmpty()}\"")
         buildConfigField("String", "APP_URL", "\"${appUrl.orEmpty()}\"")
+        buildConfigField("String", "UI_HOST", "\"${uiHost.orEmpty()}\"")
         buildConfigField("String", "SERVER_PINS", "\"${serverPins.joinToString(",")}\"")
         buildConfigField("String", "EXPECTED_SIGNING_DIGESTS", "\"${expectedDigests.joinToString(",")}\"")
         buildConfigField("int", "MIN_WEBVIEW_MAJOR", minWebViewMajor.toString())
@@ -205,6 +230,37 @@ abstract class GenerateNetworkSecurityConfig : DefaultTask() {
     }
 }
 
+// ------------------------------------------------------------------ packaged UI (security/09-ui-in-apk.md)
+/**
+ * Copies the messenger-ui app build into assets/public, where Capacitor serves it as https://<uiHost>/.
+ * Refuses a build made for another API origin (the bundle carries VITE_API_ORIGIN as a string) and
+ * leaves out what the APK must not ship: service worker scripts, source maps, bundle reports.
+ */
+abstract class BundleWebUi : DefaultTask() {
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE) abstract val dist: DirectoryProperty
+    @get:Input abstract val apiOrigin: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun bundle() {
+        val src = dist.get().asFile
+        val out = outputDir.get().asFile.apply { deleteRecursively() }
+        val public = File(out, "public").apply { mkdirs() }
+        check(File(src, "index.html").isFile) { "no index.html in $src" }
+        val origin = apiOrigin.get()
+        val scripts = File(src, "assets").listFiles { f -> f.name.endsWith(".js") }.orEmpty()
+        check(scripts.any { origin in it.readText() }) {
+            "the UI in $src was not built for $origin (messenger-ui: VITE_API_ORIGIN=$origin npm run build:app)"
+        }
+        val skip = Regex("""(^|/)(push-sw\.js|app-sw\.js|sw\.js|workbox-[^/]*\.js|registerSW\.js|manifest\.webmanifest|stats\.html)$|\.map$""")
+        src.walkTopDown().filter { it.isFile }.forEach { f ->
+            val rel = f.relativeTo(src).invariantSeparatorsPath
+            if (!skip.containsMatchIn(rel)) f.copyTo(File(public, rel), overwrite = true)
+        }
+        logger.lifecycle("${name}: UI from $src (API $origin)")
+    }
+}
+
 val releaseDebuggable = android.buildTypes.getByName("release").isDebuggable
 val validateConfig = tasks.register("validateWolpConfig") {
     group = "verification"
@@ -233,6 +289,14 @@ androidComponents {
             dependsOn(validateConfig)
         }
         variant.sources.res?.addGeneratedSourceDirectory(nsc, GenerateNetworkSecurityConfig::outputDir)
+
+        val ui = tasks.register<BundleWebUi>("bundle${cap}WebUi") {
+            dist.set(uiDist)
+            apiOrigin.set(appUrl.orEmpty().trimEnd('/'))
+            outputDir.set(layout.buildDirectory.dir("generated/wolp-ui/${variant.name}"))
+            dependsOn(validateConfig)
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(ui, BundleWebUi::outputDir)
 
         if (debug) return@onVariants
         // ---------------------------------------------- S2 §7.3 build check (as wolp-device-trust/pilot)

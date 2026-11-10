@@ -25,7 +25,8 @@ import org.wolpmessenger.web.JsDeviceTrust
 
 /**
  * `DeviceTrust` plugin (S1 §5.1): JS ↔ S2. Every method first checks that this very call came
- * through [BridgeGuard] from the main frame of `app.<host>` (S1 §5); `enroll`, iframes and calls
+ * through [BridgeGuard] from the main frame of the packaged UI (S1 §5, security/09); the API host,
+ * `enroll`, iframes and calls
  * that bypassed the guard get `PERMISSION_DENIED`. No method returns key material.
  */
 @CapacitorPlugin(name = "DeviceTrust")
@@ -33,8 +34,8 @@ class DeviceTrustPlugin : Plugin() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun load() {
-        // Runs inside Bridge construction, before server.url is loaded (see BridgeGuard).
-        BridgeGuard.install(bridge, AppConfig.appOrigin)
+        // Runs inside Bridge construction, before the UI is loaded (see BridgeGuard).
+        BridgeGuard.install(bridge, AppConfig.uiOrigin)
     }
 
     override fun handleOnDestroy() {
@@ -42,7 +43,7 @@ class DeviceTrustPlugin : Plugin() {
     }
 
     private fun admitted(call: PluginCall): Boolean {
-        if (CallOrigins.allowed(call.callbackId, AppConfig.appOrigin)) return true
+        if (CallOrigins.allowed(call.callbackId, AppConfig.uiOrigin)) return true
         Log.w(WolpApp.TAG, "DeviceTrust.${call.methodName}: refused (not the app's main frame)")
         call.reject("plugin call refused", BridgePolicy.PERMISSION_DENIED)
         return false

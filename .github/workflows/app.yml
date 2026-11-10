@@ -23,6 +23,8 @@ jobs:
         -Pwolp.appUrl=https://app.ci.invalid
         -Pwolp.serverPins=sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=,sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=
         -Pwolp.extraTrustAnchor=../../p1/stand/devices/pki/stand-root.pem
+        -Pwolp.uiHost=ui.ci.invalid
+        -Pwolp.uiDist=build/ci-ui
     defaults:
       run:
         working-directory: app/android
@@ -78,6 +80,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The packaged UI (security/09) is messenger-ui's app build, a separate repository: CI bundles a
+      # stub with the same shape (index.html + assets/*.js carrying the API origin) instead.
+      - name: stub UI build for wolp.uiDist
+        run: |
+          mkdir -p build/ci-ui/assets
+          echo '<!doctype html><title>ci</title><script type="module" src="/assets/index.js"></script>' > build/ci-ui/index.html
+          echo 'export const API_ORIGIN = "https://app.ci.invalid";' > build/ci-ui/assets/index.js
+          echo 'self.addEventListener("push", () => {});' > build/ci-ui/push-sw.js
+
       - name: debug build and unit tests
         run: ./gradlew --no-daemon $WOLP :app:assembleProductDebug :app:testProductDebugUnitTest
 
@@ -95,6 +106,15 @@ jobs:
             echo "verifyPilotReleaseBuildKind accepted a foreign signer"; exit 1; fi
           if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.appUrl=https://localhost:9444 :app:verifyProductReleaseBuildKind; then
             echo "verifyProductReleaseBuildKind accepted the stand host"; exit 1; fi
+          # packaged UI: a build for another API origin and a cross-site uiHost are refused; no service worker in the APK
+          if ./gradlew --no-daemon -q $WOLP -Pwolp.appUrl=https://app2.ci.invalid :app:bundleProductDebugWebUi; then
+            echo "bundleProductDebugWebUi accepted a UI built for another API origin"; exit 1; fi
+          if ./gradlew --no-daemon -q $WOLP -Pwolp.uiHost=ui.example.org :app:validateWolpConfig; then
+            echo "validateWolpConfig accepted a cross-site uiHost"; exit 1; fi
+          for apk in app/build/outputs/apk/*/release/*.apk; do
+            unzip -l "$apk" | grep -q 'assets/public/index.html' || { echo "$apk: no packaged UI"; exit 1; }
+            if unzip -l "$apk" | grep -q 'push-sw.js'; then echo "$apk: service worker script packaged"; exit 1; fi
+          done
           for apk in app/build/outputs/apk/*/release/*.apk; do
             # libwolpdt.so stripped by the app's NDK (API.md §1)
             unzip -p "$apk" lib/arm64-v8a/libwolpdt.so > "$RUNNER_TEMP/libwolpdt.so"

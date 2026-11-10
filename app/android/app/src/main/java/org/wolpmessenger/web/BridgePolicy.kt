@@ -6,7 +6,8 @@ import java.util.concurrent.ConcurrentHashMap
  * S1 §5: who may call native plugins. Pure (no Android), JVM-tested; [BridgeGuard] applies it.
  *
  * Capacitor 8.6 checks only `isMainFrame` and never tells a plugin where a call came from (P1-b),
- * so the guard replaces its `androidBridge` listener, admits only the main frame of `app.<host>`
+ * so the guard replaces its `androidBridge` listener, admits only the main frame of the packaged UI
+ * (`https://<uiHost>`, security/09)
  * and records each admitted call here by its `callbackId`. A plugin that finds no record refuses
  * the call: that also covers the bridge falling back to `addJavascriptInterface` (no origin at all).
  */

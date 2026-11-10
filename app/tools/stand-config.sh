@@ -12,5 +12,8 @@ wolp.enrollUrl=https://localhost:9443
 wolp.appUrl=https://localhost:9444
 wolp.serverPins=sha256/$(pin $STAND/out/server.key),sha256/$(pin $STAND/out/backup.key)
 wolp.extraTrustAnchor=../../p1/stand/devices/pki/stand-root.pem
+# packaged UI (security/09): https://localhost is same-site with localhost:9444; build it with
+#   cd <messenger-ui>/front && VITE_API_ORIGIN=https://localhost:9444 npm run build:app
+wolp.uiHost=localhost
 PROPS
 cat android/stand.properties

@@ -12,7 +12,7 @@ import org.wolpmessenger.WolpApp
 /**
  * Replaces Capacitor's `androidBridge` WebMessageListener with one that applies [BridgePolicy]
  * (S1 §5). Installed from a plugin's `load()`: Capacitor builds its MessageHandler, then loads
- * plugins, and only then loads `server.url` — so no document ever sees Capacitor's listener.
+ * plugins, and only then loads the UI — so no document ever sees Capacitor's listener.
  *
  * Capacitor keeps the reply channel in a private field of MessageHandler; the guard sets it before
  * passing an admitted message on, as Capacitor's own listener does (both fields are kept for R8 in
