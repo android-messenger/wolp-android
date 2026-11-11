@@ -23,7 +23,7 @@ object BridgeGuard {
     private const val NAME = "androidBridge"
 
     /** Plugins whose calls are recorded for their own origin check (S1 §5: every plugin of ours). */
-    val GUARDED = setOf("DeviceTrust", "Files", "Push", "Call")
+    val GUARDED = setOf("DeviceTrust", "Files", "Push", "Call", "AppSettings") // every plugin we register (BridgeGuardTest)
 
     @Volatile private var installedOn: Bridge? = null
 
