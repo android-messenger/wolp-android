@@ -77,7 +77,8 @@ class Notifier(private val context: Context) {
     fun call(conversationId: String, callerId: String, media: String?, callerName: String?) {
         val publicVersion = Notification.Builder(context, CH_CALLS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(incomingCall) // D16: no name on the lock screen
+            .setContentTitle(incomingCall)
+            .setContentText(callerName) // D16: the name on the lock screen too
             .build()
         val tapIntent = tap(NotificationTap(null, conversationId, callerId, media), requestCode("call:$conversationId"))
         val n = Notification.Builder(context, CH_CALLS)

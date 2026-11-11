@@ -5,7 +5,7 @@ import org.wolpmessenger.push.PushRules
 import java.time.Duration
 import java.time.Instant
 
-/** An incoming call announced by push (S1 §7.3). The name is only from the local cache and never shown when locked (D16). */
+/** An incoming call announced by push (S1 §7.3). The name is only from the local cache; shown on the lock screen too (D16, owner 2026-11-11). */
 data class IncomingCall(
     val conversationId: String,
     val callerId: String,

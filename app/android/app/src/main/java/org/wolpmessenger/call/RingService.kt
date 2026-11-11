@@ -29,8 +29,8 @@ import org.wolpmessenger.push.Notifier
 /**
  * S1 §7.3 incoming push call: a short FGS (`phoneCall`, allowed from a high-priority FCM) that loops
  * the ringtone and vibrates until Accept, Decline, `call_cancel` or the timeout. Its notification is a
- * CallStyle one with a full-screen intent to [IncomingCallActivity]; on the lock screen it says only
- * «Входящий звонок» (D16). One call at a time: a second push call while ringing is ignored (the
+ * CallStyle one with a full-screen intent to [IncomingCallActivity]; the caller's name is shown on the
+ * lock screen too (D16, owner 2026-11-11). One call at a time: a second push call while ringing is ignored (the
  * caller hears the end by its own timeout).
  */
 class RingService : Service() {
@@ -167,7 +167,8 @@ class RingService : Service() {
         val caller = Person.Builder().setName(c.callerName ?: getString(R.string.call_incoming)).setImportant(true).build()
         val publicVersion = Notification.Builder(this, Notifier.CH_RINGING)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(getString(R.string.call_incoming)) // D16: no name on the lock screen
+            .setContentTitle(c.callerName ?: getString(R.string.call_incoming)) // D16: the name on the lock screen too
+            .setContentText(if (c.callerName != null) getString(R.string.call_incoming) else null)
             .build()
         return Notification.Builder(this, Notifier.CH_RINGING)
             .setSmallIcon(R.drawable.ic_notification)
