@@ -18,6 +18,10 @@ import org.wolpmessenger.call.WebWs
  * within 3 s (JS throttled, or a UI without the listener) the WebView is parked on about:blank, which
  * closes every connection, and the UI is loaded again on the next foreground.
  *
+ * A hold that ends while the app is still in the background (the call hung up, the chooser timed out) closes
+ * the WebSocket then: otherwise the backend keeps seeing the user online, the backgrounded web app ACKs
+ * every message, and no push goes out (the WebView cannot show a notification itself).
+ *
  * It also keeps [CallState.webWs] (S1-6, §7.3 P1-i: a native decline socket only while the web app's
  * is closed) and holds the return to the foreground while a native decline socket is open.
  */
@@ -34,6 +38,9 @@ class BackgroundController(
     private var mainStarted = false
     /** The process came to the foreground only for IncomingCallActivity: the web app stays in the background. */
     private var deferred = false
+    /** Went to the background with the connection kept for a hold: close it once the holds are gone. */
+    private var heldInBackground = false
+    private val recheckHolds = Runnable { recheckHolds() }
     private val parkNow = Runnable {
         waiting = false
         Log.i(WolpApp.TAG, "background: no wsClosed within ${ACK_TIMEOUT_MS} ms, parking the WebView")
@@ -44,13 +51,17 @@ class BackgroundController(
 
     fun attach() {
         CallState.setWebWs(WebWs.OPEN) // the Bridge loads the UI right away; it connects on its own
+        PushState.onAllReleased = { main.post(recheckHolds) }
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
     }
 
     fun detach() {
         CallState.setWebWs(WebWs.CLOSED)
         PushState.appInForeground = false
+        PushState.onAllReleased = null
+        heldInBackground = false
         main.removeCallbacks(parkNow)
+        main.removeCallbacks(recheckHolds)
         ProcessLifecycleOwner.get().lifecycle.removeObserver(this)
     }
 
@@ -79,6 +90,8 @@ class BackgroundController(
     private fun foreground() {
         PushState.appInForeground = true
         PushState.onForeground()
+        heldInBackground = false
+        main.removeCallbacks(recheckHolds)
         main.removeCallbacks(parkNow)
         waiting = false
         if (!started) { started = true; return } // the catch-up event on attach is not a return from background
@@ -102,8 +115,28 @@ class BackgroundController(
         PushState.appInForeground = false // a locked screen must not keep the open chat silent
         if (PushState.keepConnection()) {
             Log.i(WolpApp.TAG, "background: keeping the connection (system UI or call)")
+            heldInBackground = true
+            scheduleRecheck()
             return
         }
+        closeInBackground()
+    }
+
+    /** A time-limited hold has no release callback when it runs out: look again at its expiry. */
+    private fun scheduleRecheck() {
+        main.removeCallbacks(recheckHolds)
+        PushState.msUntilNextExpiry()?.let { main.postDelayed(recheckHolds, it + 50) }
+    }
+
+    private fun recheckHolds() {
+        if (!heldInBackground || PushState.appInForeground) return
+        if (PushState.keepConnection()) { scheduleRecheck(); return }
+        heldInBackground = false
+        Log.i(WolpApp.TAG, "background: hold ended")
+        closeInBackground()
+    }
+
+    private fun closeInBackground() {
         Log.i(WolpApp.TAG, "background: asking the web app to close its WebSocket")
         if (CallState.webWs.value == WebWs.OPEN) CallState.setWebWs(WebWs.CLOSING)
         plugin()?.emitBackground()
