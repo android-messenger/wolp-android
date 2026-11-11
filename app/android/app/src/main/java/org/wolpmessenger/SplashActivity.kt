@@ -152,16 +152,16 @@ class SplashActivity : ComponentActivity() {
             enrollBusy = false
             when (r) {
                 is EnrollResult.Ok -> { retryCopy.fill('\u0000'); evaluate() }
-                is EnrollResult.WrongPassword -> enrollMessage = "Неверный пароль. Осталось попыток: ${r.attemptsLeft}"
+                is EnrollResult.WrongPassword -> enrollMessage = getString(R.string.enroll_wrong_password, r.attemptsLeft)
                 EnrollResult.PasswordBurned, EnrollResult.PasswordExpired, EnrollResult.NoPassword ->
-                    enrollMessage = "Пароль недействителен. Получите новый у администратора"
-                is EnrollResult.PolicyRejected -> enrollMessage = "Устройство не допущено (${r.reason})"
+                    enrollMessage = getString(R.string.enroll_password_invalid)
+                is EnrollResult.PolicyRejected -> enrollMessage = getString(R.string.enroll_policy_rejected, r.reason)
                 is EnrollResult.UpdateRequired -> show(Screen.Update(r.kind)) // password not burned
                 is EnrollResult.Unsupported -> show(Screen.Unsupported(r.reasons))
                 is EnrollResult.Blocked -> show(Screen.Blocked(r.reason))
                 EnrollResult.NoSession -> { loginOpened = false; show(Screen.Login) }
                 is EnrollResult.Transient -> {
-                    enrollMessage = "Нет связи с сервером, повторите"
+                    enrollMessage = getString(R.string.enroll_offline)
                     if (!autoRetried) {
                         autoRetried = true
                         delay((r.retryAfter?.toMillis() ?: 3_000L).coerceIn(1_000L, 60_000L))

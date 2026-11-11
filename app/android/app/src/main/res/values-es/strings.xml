@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Native texts, Spanish. Keep in step with values/strings.xml. -->
+<resources>
+    <string name="notif_channel_messages">Mensajes</string>
+    <string name="notif_channel_calls">Llamadas</string>
+    <string name="notif_channel_ringing">Llamada entrante</string>
+    <string name="notif_channel_ongoing">Llamada en curso</string>
+    <string name="notif_channel_system">Sistema</string>
+    <string name="notif_new_message">Nuevo mensaje</string>
+    <string name="call_incoming">Llamada entrante</string>
+    <string name="call_missed">Llamada perdida</string>
+    <string name="call_ongoing">Llamada en curso</string>
+    <string name="call_declined">Llamada rechazada</string>
+    <string name="call_video">Videollamada</string>
+    <string name="call_audio">Llamada de voz</string>
+    <string name="call_decline">Rechazar</string>
+    <string name="call_accept">Aceptar</string>
+    <string name="fsi_hint_title">Las llamadas no se abren a pantalla completa</string>
+    <string name="fsi_hint_text">Permite las notificaciones a pantalla completa en los ajustes</string>
+    <string name="enroll_wrong_password">Contraseña incorrecta. Intentos restantes: %1$d</string>
+    <string name="enroll_password_invalid">La contraseña ya no es válida. Pide una nueva a tu administrador</string>
+    <string name="enroll_policy_rejected">Este dispositivo no está permitido (%1$s)</string>
+    <string name="enroll_offline">Sin conexión con el servidor, inténtalo de nuevo</string>
+    <string name="blocked_title">Dispositivo bloqueado</string>
+    <string name="blocked_replaced">El acceso se ha trasladado a otro dispositivo. Este dispositivo está desconectado.</string>
+    <string name="blocked_security">Este dispositivo se ha bloqueado por motivos de seguridad. Contacta con tu administrador.</string>
+    <string name="blocked_reenroll_hint">Para volver a registrar el teléfono, reinstala la aplicación o borra sus datos y pide una contraseña a tu administrador.</string>
+    <string name="unsupported_title">Dispositivo no compatible</string>
+    <string name="unsupported_software_keystore">No hay almacenamiento de claves por hardware.</string>
+    <string name="unsupported_patch_too_old">La actualización de seguridad de Android es demasiado antigua. Actualiza el sistema.</string>
+    <string name="update_title">Actualización necesaria</string>
+    <string name="update_os">Actualiza el sistema: el parche de seguridad es demasiado antiguo.</string>
+    <string name="update_app">Esta versión de la aplicación (%1$s) ya no es compatible. Instala la nueva versión.</string>
+    <string name="offline_title">Sin conexión con el servidor</string>
+    <string name="offline_unverified_title">No se pudo verificar el servidor</string>
+    <string name="offline_unverified_body">La conexión no superó la comprobación de autenticidad del servidor. Inténtalo más tarde o en otra red.</string>
+    <string name="wrong_user_title">Otro usuario</string>
+    <string name="wrong_user_body">Este dispositivo está registrado a nombre de otro usuario. Contacta con tu administrador.</string>
+    <string name="webview_title">Actualiza Android System WebView</string>
+    <string name="webview_body">La aplicación necesita una versión más reciente de Android System WebView.</string>
+    <string name="login_title">Iniciar sesión</string>
+    <string name="login_body">Inicia sesión con tu cuenta del mensajero.</string>
+    <string name="onboarding_title">Registro del dispositivo</string>
+    <string name="onboarding_expired">Tu acceso ha caducado y necesitas una nueva contraseña. Pídela a tu administrador.</string>
+    <string name="onboarding_body">Introduce la contraseña de registro que te dio tu administrador.</string>
+    <string name="onboarding_label">Contraseña de registro</string>
+    <string name="action_close">Cerrar</string>
+    <string name="action_check_again">Comprobar de nuevo</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_login">Iniciar sesión</string>
+    <string name="action_login_again">Iniciar sesión de nuevo</string>
+    <string name="action_register">Registrar</string>
+</resources>

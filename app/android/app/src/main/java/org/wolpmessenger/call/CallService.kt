@@ -125,14 +125,14 @@ class CallService : Service() {
             this, RC_HANGUP, Intent(this, CallService::class.java).setAction(ACTION_HANGUP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val person = Person.Builder().setName(peerName ?: ONGOING).build()
+        val person = Person.Builder().setName(peerName ?: getString(R.string.call_ongoing)).build()
         val publicVersion = Notification.Builder(this, Notifier.CH_ONGOING)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(ONGOING)
+            .setContentTitle(getString(R.string.call_ongoing))
             .build()
         return Notification.Builder(this, Notifier.CH_ONGOING)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(ONGOING)
+            .setContentTitle(getString(R.string.call_ongoing))
             .setStyle(Notification.CallStyle.forOngoingCall(person, hangup))
             .setCategory(Notification.CATEGORY_CALL)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -149,7 +149,6 @@ class CallService : Service() {
         private const val RC_HANGUP = 42
         private const val ORPHAN_MS = 10_000L
         private const val MAX_CALL_MS = 6 * 60 * 60_000L
-        private const val ONGOING = "Идёт звонок"
         private const val ACTION_START = "org.wolpmessenger.call.START"
         private const val ACTION_MEDIA = "org.wolpmessenger.call.MEDIA"
         private const val ACTION_HANGUP = "org.wolpmessenger.call.HANGUP"

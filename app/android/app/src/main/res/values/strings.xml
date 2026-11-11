@@ -1,4 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Native texts, English (default). The language follows the web UI: AppSettings.setLanguage → LocaleManager (S1 §5.5). -->
 <resources>
-    <string name="app_name">Wolp Messenger</string>
+    <string name="app_name" translatable="false">Wolp Messenger</string>
+    <string name="notif_channel_messages">Messages</string>
+    <string name="notif_channel_calls">Calls</string>
+    <string name="notif_channel_ringing">Incoming call</string>
+    <string name="notif_channel_ongoing">Current call</string>
+    <string name="notif_channel_system">System</string>
+    <string name="notif_new_message">New message</string>
+    <string name="call_incoming">Incoming call</string>
+    <string name="call_missed">Missed call</string>
+    <string name="call_ongoing">Call in progress</string>
+    <string name="call_declined">Call declined</string>
+    <string name="call_video">Video call</string>
+    <string name="call_audio">Voice call</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_accept">Accept</string>
+    <string name="fsi_hint_title">Calls do not open full screen</string>
+    <string name="fsi_hint_text">Allow full-screen notifications in settings</string>
+    <string name="enroll_wrong_password">Wrong password. Attempts left: %1$d</string>
+    <string name="enroll_password_invalid">The password is no longer valid. Get a new one from your administrator</string>
+    <string name="enroll_policy_rejected">This device is not allowed (%1$s)</string>
+    <string name="enroll_offline">No connection to the server, try again</string>
+    <string name="blocked_title">Device blocked</string>
+    <string name="blocked_replaced">Access has moved to another device. This device is disconnected.</string>
+    <string name="blocked_security">This device has been blocked for security reasons. Contact your administrator.</string>
+    <string name="blocked_reenroll_hint">To register the phone again, reinstall the app or clear its data and get a password from your administrator.</string>
+    <string name="unsupported_title">Device not supported</string>
+    <string name="unsupported_software_keystore">No hardware key storage.</string>
+    <string name="unsupported_patch_too_old">The Android security update is too old. Update your system.</string>
+    <string name="update_title">Update required</string>
+    <string name="update_os">Update your system: the security patch is too old.</string>
+    <string name="update_app">This app version (%1$s) is no longer supported. Install the new version.</string>
+    <string name="offline_title">No connection to the server</string>
+    <string name="offline_unverified_title">Could not verify the server</string>
+    <string name="offline_unverified_body">The connection failed the server authenticity check. Try again later or on another network.</string>
+    <string name="wrong_user_title">Another user</string>
+    <string name="wrong_user_body">This device is registered to another user. Contact your administrator.</string>
+    <string name="webview_title">Update Android System WebView</string>
+    <string name="webview_body">The app needs a newer version of Android System WebView.</string>
+    <string name="login_title">Sign in</string>
+    <string name="login_body">Sign in with your messenger account.</string>
+    <string name="onboarding_title">Device registration</string>
+    <string name="onboarding_expired">Your access has expired and a new password is needed. Get it from your administrator.</string>
+    <string name="onboarding_body">Enter the onboarding password from your administrator.</string>
+    <string name="onboarding_label">Onboarding password</string>
+    <string name="action_close">Close</string>
+    <string name="action_check_again">Check again</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_login">Sign in</string>
+    <string name="action_login_again">Sign in again</string>
+    <string name="action_register">Register</string>
 </resources>

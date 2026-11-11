@@ -16,7 +16,7 @@ import org.wolpmessenger.SplashActivity
 
 /**
  * Local notifications for push signals (S1 §7.1). Texts never come from the push: names from the
- * local cache, otherwise "Новое сообщение". A tap opens SplashActivity (S1 §3 order first), which
+ * local cache, otherwise a generic text (res/values(-es)/strings.xml, language of the web UI — S1 §5.5). A tap opens SplashActivity (S1 §3 order first), which
  * passes the tap on to MainActivity → `notificationTap`.
  *
  * A push call rings through RingService (S1-6, §7.3) on the silent `ringing` channel (the service
@@ -24,9 +24,12 @@ import org.wolpmessenger.SplashActivity
  */
 class Notifier(private val context: Context) {
     private val nm = context.getSystemService(NotificationManager::class.java)
+    private val generic get() = context.getString(R.string.notif_new_message)
+    private val incomingCall get() = context.getString(R.string.call_incoming)
+    private val missedCall get() = context.getString(R.string.call_missed)
 
     fun ensureChannels() {
-        val calls = NotificationChannel(CH_CALLS, "Звонки", NotificationManager.IMPORTANCE_HIGH).apply {
+        val calls = NotificationChannel(CH_CALLS, context.getString(R.string.notif_channel_calls), NotificationManager.IMPORTANCE_HIGH).apply {
             setSound(
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
                 AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build(),
@@ -36,31 +39,31 @@ class Notifier(private val context: Context) {
         }
         nm.createNotificationChannels(
             listOf(
-                NotificationChannel(CH_MESSAGES, "Сообщения", NotificationManager.IMPORTANCE_HIGH).apply {
+                NotificationChannel(CH_MESSAGES, context.getString(R.string.notif_channel_messages), NotificationManager.IMPORTANCE_HIGH).apply {
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 },
                 calls,
-                NotificationChannel(CH_RINGING, "Входящий звонок", NotificationManager.IMPORTANCE_HIGH).apply {
+                NotificationChannel(CH_RINGING, context.getString(R.string.notif_channel_ringing), NotificationManager.IMPORTANCE_HIGH).apply {
                     setSound(null, null) // RingService loops the ringtone and vibrates itself
                     enableVibration(false)
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 },
-                NotificationChannel(CH_ONGOING, "Текущий звонок", NotificationManager.IMPORTANCE_LOW),
-                NotificationChannel(CH_SYSTEM, "Служебные", NotificationManager.IMPORTANCE_DEFAULT),
+                NotificationChannel(CH_ONGOING, context.getString(R.string.notif_channel_ongoing), NotificationManager.IMPORTANCE_LOW),
+                NotificationChannel(CH_SYSTEM, context.getString(R.string.notif_channel_system), NotificationManager.IMPORTANCE_DEFAULT),
             ),
         )
     }
 
     fun message(conversationId: String?, senderName: String?) {
-        val title = senderName ?: GENERIC
+        val title = senderName ?: generic
         val publicVersion = Notification.Builder(context, CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(GENERIC)
+            .setContentTitle(generic)
             .build()
         val n = Notification.Builder(context, CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(if (senderName != null) GENERIC else null)
+            .setContentText(if (senderName != null) generic else null)
             .setCategory(Notification.CATEGORY_MESSAGE)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion)
@@ -74,12 +77,12 @@ class Notifier(private val context: Context) {
     fun call(conversationId: String, callerId: String, media: String?, callerName: String?) {
         val publicVersion = Notification.Builder(context, CH_CALLS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(INCOMING_CALL) // D16: no name on the lock screen
+            .setContentTitle(incomingCall) // D16: no name on the lock screen
             .build()
         val tapIntent = tap(NotificationTap(null, conversationId, callerId, media), requestCode("call:$conversationId"))
         val n = Notification.Builder(context, CH_CALLS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(INCOMING_CALL)
+            .setContentTitle(incomingCall)
             .setContentText(callerName)
             .setCategory(Notification.CATEGORY_CALL)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -100,11 +103,11 @@ class Notifier(private val context: Context) {
     fun missedCall(conversationId: String, callerName: String?) {
         val publicVersion = Notification.Builder(context, CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(MISSED_CALL)
+            .setContentTitle(missedCall)
             .build()
         val n = Notification.Builder(context, CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(MISSED_CALL)
+            .setContentTitle(missedCall)
             .setContentText(callerName)
             .setCategory(Notification.CATEGORY_MISSED_CALL)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -129,8 +132,8 @@ class Notifier(private val context: Context) {
         )
         val n = Notification.Builder(context, CH_SYSTEM)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Звонки не открываются на весь экран")
-            .setContentText("Разрешите полноэкранные уведомления в настройках")
+            .setContentTitle(context.getString(R.string.fsi_hint_title))
+            .setContentText(context.getString(R.string.fsi_hint_text))
             .setAutoCancel(true)
             .setContentIntent(settings)
             .build()
@@ -160,9 +163,6 @@ class Notifier(private val context: Context) {
         const val CH_RINGING = "ringing"
         const val CH_ONGOING = "ongoing_call"
         const val CH_SYSTEM = "system"
-        const val GENERIC = "Новое сообщение"
-        const val INCOMING_CALL = "Входящий звонок"
-        const val MISSED_CALL = "Пропущенный звонок"
         private const val GROUP_UNKNOWN = "unknown"
         private const val ID_MESSAGE = 1
         private const val ID_CALL = 2

@@ -1,5 +1,7 @@
 package org.wolpmessenger.call
 
+import org.wolpmessenger.R
+import androidx.compose.ui.res.stringResource
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -57,23 +59,23 @@ class IncomingCallActivity : ComponentActivity() {
             val current by CallState.ringing.collectAsState()
             val c = current ?: call
             Page {
-                Text(INCOMING, style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.call_incoming), style = MaterialTheme.typography.headlineSmall)
                 if (!isLocked && c.callerName != null) Text(c.callerName, style = MaterialTheme.typography.headlineMedium)
                 // the backend's call push carries no media type yet: say it only when known
                 when (c.media) {
-                    "video" -> Text("Видеозвонок", style = MaterialTheme.typography.bodyLarge)
-                    "audio" -> Text("Аудиозвонок", style = MaterialTheme.typography.bodyLarge)
+                    "video" -> Text(stringResource(R.string.call_video), style = MaterialTheme.typography.bodyLarge)
+                    "audio" -> Text(stringResource(R.string.call_audio), style = MaterialTheme.typography.bodyLarge)
                 }
                 Spacer(Modifier.height(48.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
                     Button(
                         onClick = ::decline,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                    ) { Text("Отклонить") }
+                    ) { Text(stringResource(R.string.call_decline)) }
                     Button(
                         onClick = { accept() },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                    ) { Text("Принять") }
+                    ) { Text(stringResource(R.string.call_accept)) }
                 }
             }
         }
@@ -114,6 +116,5 @@ class IncomingCallActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_ACCEPT = "org.wolpmessenger.call.ACCEPT_UI"
-        private const val INCOMING = "Входящий звонок"
     }
 }
