@@ -29,6 +29,8 @@
     <string name="unsupported_title">Device not supported</string>
     <string name="unsupported_software_keystore">No hardware key storage.</string>
     <string name="unsupported_patch_too_old">The Android security update is too old. Update your system.</string>
+    <string name="unsupported_no_screen_lock">Set a screen lock (PIN, pattern or password) and open the app again.</string>
+    <string name="action_open_security_settings">Open security settings</string>
     <string name="update_title">Update required</string>
     <string name="update_os">Update your system: the security patch is too old.</string>
     <string name="update_app">This app version (%1$s) is no longer supported. Install the new version.</string>

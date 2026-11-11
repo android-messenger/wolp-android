@@ -1,5 +1,7 @@
 package org.wolpmessenger.ui
 
+import android.content.Intent
+import android.provider.Settings
 import org.wolpmessenger.R
 import androidx.compose.ui.res.stringResource
 import org.wolpmessenger.BuildConfig
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -80,11 +83,21 @@ fun UnsupportedScreen(reasons: List<String>, onClose: () -> Unit) = Page {
             when (it) {
                 "SOFTWARE_KEYSTORE" -> stringResource(R.string.unsupported_software_keystore)
                 "PATCH_TOO_OLD" -> stringResource(R.string.unsupported_patch_too_old)
+                "NO_SCREEN_LOCK" -> stringResource(R.string.unsupported_no_screen_lock)
                 else -> it
             }
         )
     }
-    Button(onClick = onClose) { Text(stringResource(R.string.action_close)) }
+    // spec 001 story 2: a screen lock is required; SplashActivity re-runs the order on return (onStart)
+    if ("NO_SCREEN_LOCK" in reasons) {
+        val context = LocalContext.current
+        Button(onClick = { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }) {
+            Text(stringResource(R.string.action_open_security_settings))
+        }
+        OutlinedButton(onClick = onClose) { Text(stringResource(R.string.action_close)) }
+    } else {
+        Button(onClick = onClose) { Text(stringResource(R.string.action_close)) }
+    }
 }
 
 @Composable
