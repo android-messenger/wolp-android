@@ -17,7 +17,7 @@ cd app && npm ci && cd android
 export JAVA_HOME=/opt/jdk-21.0.2 ANDROID_HOME=~/Android/Sdk   # ANDROID_HOME нужен и включённой сборке S2
 ../tools/stand-config.sh                                       # стенд: хосты localhost:9443/9444, пины, корень стенда, uiHost
 (cd ../../../../messenger/front && VITE_API_ORIGIN=https://localhost:9444 VITE_TURN_HOST=localhost \
-  VITE_MESSENGER_ADMIN_KEY=stand-messenger-admin-key npm run build:app)   # UI в APK (wolp.uiDist)
+  npm run build:app)   # UI в APK (wolp.uiDist)
 ./gradlew :app:assembleProductDebug
 ```
 `-Pwolp.deviceTrustDir=../../../wolp-device-trust` — собрать против рабочей копии S2 вместо сабмодуля.
