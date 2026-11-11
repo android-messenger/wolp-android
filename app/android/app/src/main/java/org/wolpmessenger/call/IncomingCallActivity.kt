@@ -21,46 +21,46 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.wolpmessenger.WolpApp
+import org.wolpmessenger.push.NameCache
 import org.wolpmessenger.secureWindow
 import org.wolpmessenger.ui.Page
 
 /**
  * S1 §7.3 full-screen incoming call. The only activity with `showWhenLocked`/`turnScreenOn`
- * (manifest). Locked: «Входящий звонок» without the name (D16), shown after unlocking. Accept on a
+ * (manifest). Shows the caller's name also when locked (D16, owner 2026-11-11); a name unknown at push
+ * time is looked up again on open and on unlock. Accept on a
  * locked device asks for the unlock first (`requestDismissKeyguard`): the messenger never opens over
  * the lock screen. Closes itself when the ring ends (cancel, timeout, decline from the notification).
  */
 class IncomingCallActivity : ComponentActivity() {
     private val keyguard by lazy { getSystemService(KeyguardManager::class.java) }
-    private val locked = mutableStateOf(true)
     private val unlockReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) { locked.value = keyguard.isKeyguardLocked }
+        override fun onReceive(context: Context, intent: Intent) { resolveName() }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         secureWindow()
         val call = CallState.ringing.value ?: return finish()
-        locked.value = keyguard.isKeyguardLocked
+        resolveName()
         registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT), RECEIVER_NOT_EXPORTED)
         lifecycleScope.launch { CallState.ringing.filter { it?.conversationId != call.conversationId }.first(); finishAndRemoveTask() }
 
         setContent {
-            val isLocked by locked
             val current by CallState.ringing.collectAsState()
             val c = current ?: call
             Page {
                 Text(stringResource(R.string.call_incoming), style = MaterialTheme.typography.headlineSmall)
-                if (!isLocked && c.callerName != null) Text(c.callerName, style = MaterialTheme.typography.headlineMedium)
+                if (c.callerName != null) Text(c.callerName, style = MaterialTheme.typography.headlineMedium)
                 // the backend's call push carries no media type yet: say it only when known
                 when (c.media) {
                     "video" -> Text(stringResource(R.string.call_video), style = MaterialTheme.typography.bodyLarge)
@@ -90,6 +90,16 @@ class IncomingCallActivity : ComponentActivity() {
     override fun onDestroy() {
         runCatching { unregisterReceiver(unlockReceiver) }
         super.onDestroy()
+    }
+
+    /** The names cache was empty or unreadable when the push came: try again (on open, after unlocking). */
+    private fun resolveName() {
+        val c = CallState.ringing.value ?: return
+        if (c.callerName != null) return
+        lifecycleScope.launch {
+            val name = NameCache(this@IncomingCallActivity).name(c.callerId) ?: return@launch
+            CallState.ringing.update { if (it?.conversationId == c.conversationId && it.callerName == null) it.copy(callerName = name) else it }
+        }
     }
 
     private fun decline() {

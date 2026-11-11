@@ -58,6 +58,7 @@ class WolpMessagingService : FirebaseMessagingService() {
             is PushAction.Call -> {
                 // §7.3: ring through the FGS; if it may not start — the insistent notification as before
                 val call = IncomingCall(action.conversationId, action.callerId, action.media, name(action.callerId))
+                Log.i(WolpApp.TAG, "push: call, caller name ${if (call.callerName != null) "known" else "unknown"}")
                 val ringMs = CallRules.ringFor(action.ts, DeviceTrust.trustNow(), Instant.now()).toMillis()
                 if (!RingService.start(this, call, ringMs)) notifier.call(call.conversationId, call.callerId, call.media, call.callerName)
             }
