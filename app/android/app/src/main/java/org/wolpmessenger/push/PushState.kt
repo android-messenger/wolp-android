@@ -18,27 +18,54 @@ object PushState {
 
     private val holds = HashMap<String, Long>() // name → expiry (elapsedRealtime), Long.MAX_VALUE = until released
 
+    /**
+     * Called (on the releasing thread, outside the lock) after a release left no hold. The app may be in the
+     * background with the WebSocket kept open for that hold: BackgroundController closes it then.
+     */
+    @Volatile var onAllReleased: (() -> Unit)? = null
+
     @Synchronized
-    fun hold(name: String, maxMs: Long = Long.MAX_VALUE) {
-        holds[name] = if (maxMs == Long.MAX_VALUE) Long.MAX_VALUE else SystemClock.elapsedRealtime() + maxMs
+    fun hold(name: String, maxMs: Long = Long.MAX_VALUE, now: Long = SystemClock.elapsedRealtime()) {
+        holds[name] = if (maxMs == Long.MAX_VALUE) Long.MAX_VALUE else now + maxMs
+    }
+
+    fun release(name: String, now: Long = SystemClock.elapsedRealtime()) {
+        val none = synchronized(this) {
+            holds.remove(name) ?: return
+            prune(now)
+            holds.isEmpty()
+        }
+        if (none) onAllReleased?.invoke()
     }
 
     @Synchronized
-    fun release(name: String) {
-        holds.remove(name)
-    }
-
-    @Synchronized
-    fun keepConnection(): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        holds.entries.removeAll { it.value <= now }
+    fun keepConnection(now: Long = SystemClock.elapsedRealtime()): Boolean {
+        prune(now)
         return holds.isNotEmpty()
+    }
+
+    /** Time until the earliest time-limited hold runs out, or null if there is none (only open-ended holds or no hold). */
+    @Synchronized
+    fun msUntilNextExpiry(now: Long = SystemClock.elapsedRealtime()): Long? {
+        prune(now)
+        return holds.values.filter { it != Long.MAX_VALUE }.minOrNull()?.let { (it - now).coerceAtLeast(0) }
     }
 
     /** Short holds end when the app is back in the foreground. */
     @Synchronized
     fun onForeground() {
         holds.entries.removeAll { it.value != Long.MAX_VALUE }
+    }
+
+    /** Tests only. */
+    @Synchronized
+    internal fun clear() {
+        holds.clear()
+        onAllReleased = null
+    }
+
+    private fun prune(now: Long) {
+        holds.entries.removeAll { it.value <= now }
     }
 
     const val HOLD_FILE_CHOOSER = "file-chooser"
