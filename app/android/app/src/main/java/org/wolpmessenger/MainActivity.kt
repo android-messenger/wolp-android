@@ -28,6 +28,7 @@ import org.wolpmessenger.launch.AndroidProbes
 import org.wolpmessenger.launch.LaunchGate
 import org.wolpmessenger.launch.Screen
 import org.wolpmessenger.call.CallService
+import org.wolpmessenger.plugins.AppSettingsPlugin
 import org.wolpmessenger.plugins.CallPlugin
 import org.wolpmessenger.plugins.DeviceTrustPlugin
 import org.wolpmessenger.plugins.FilesPlugin
@@ -75,6 +76,7 @@ class MainActivity : BridgeActivity(), WebHost {
         registerPlugin(FilesPlugin::class.java)       // S1 §5.4: saving attachments
         registerPlugin(PushPlugin::class.java)        // S1 §5.2, §7.0
         registerPlugin(CallPlugin::class.java)        // S1 §5.3, §4.5
+        registerPlugin(AppSettingsPlugin::class.java) // S1 §5.5: language of native texts
         super.onCreate(savedInstanceState)
         // Installed synchronously after Bridge.create(): the first load's callbacks arrive later on the main looper.
         bridge.webViewClient = WolpWebViewClient(bridge, this)

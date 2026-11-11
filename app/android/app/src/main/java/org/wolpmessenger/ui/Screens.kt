@@ -1,5 +1,7 @@
 package org.wolpmessenger.ui
 
+import org.wolpmessenger.R
+import androidx.compose.ui.res.stringResource
 import org.wolpmessenger.BuildConfig
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import org.wolpmessenger.devicetrust.api.BlockReason
 import org.wolpmessenger.devicetrust.api.UpdateKind
 
-/** Native screens of S1 §3 (texts from the spec). */
+/** Native screens of S1 §3 (texts: res/values(-es)/strings.xml, language of the web UI — S1 §5.5). */
 @Composable
 fun Page(content: @Composable () -> Unit) {
     MaterialTheme {
@@ -58,84 +60,84 @@ fun WaitScreen(text: String? = null) = Page {
 
 @Composable
 fun BlockedScreen(reason: BlockReason?, onClose: () -> Unit) = Page {
-    Title("Устройство заблокировано")
+    Title(stringResource(R.string.blocked_title))
     Body(
-        if (reason == BlockReason.REPLACED) "Доступ перенесён на другое устройство. Это устройство отключено."
-        else "Устройство заблокировано по соображениям безопасности. Обратитесь к администратору."
+        if (reason == BlockReason.REPLACED) stringResource(R.string.blocked_replaced)
+        else stringResource(R.string.blocked_security)
     )
     // hint for admin-side blocks only; none for RASP (S1 §3)
     if (reason == BlockReason.REVOKED || reason == BlockReason.REPLACED || reason == BlockReason.IDENTITY_REVOKED) {
-        Body("Чтобы зарегистрировать телефон заново, переустановите приложение или очистите его данные и получите пароль у администратора.")
+        Body(stringResource(R.string.blocked_reenroll_hint))
     }
-    Button(onClick = onClose) { Text("Закрыть") }
+    Button(onClick = onClose) { Text(stringResource(R.string.action_close)) }
 }
 
 @Composable
 fun UnsupportedScreen(reasons: List<String>, onClose: () -> Unit) = Page {
-    Title("Устройство не поддерживается")
+    Title(stringResource(R.string.unsupported_title))
     reasons.forEach {
         Body(
             when (it) {
-                "SOFTWARE_KEYSTORE" -> "Нет аппаратного хранилища ключей."
-                "PATCH_TOO_OLD" -> "Слишком старое обновление безопасности Android. Обновите систему."
+                "SOFTWARE_KEYSTORE" -> stringResource(R.string.unsupported_software_keystore)
+                "PATCH_TOO_OLD" -> stringResource(R.string.unsupported_patch_too_old)
                 else -> it
             }
         )
     }
-    Button(onClick = onClose) { Text("Закрыть") }
+    Button(onClick = onClose) { Text(stringResource(R.string.action_close)) }
 }
 
 @Composable
 fun UpdateScreen(kind: UpdateKind?, onRetry: () -> Unit) = Page {
-    Title("Нужно обновление")
+    Title(stringResource(R.string.update_title))
     Body(
-        if (kind == UpdateKind.OS) "Обновите систему: патч безопасности слишком старый."
-        else "Эта версия приложения (${BuildConfig.VERSION_NAME}) больше не поддерживается. Установите новую версию."
+        if (kind == UpdateKind.OS) stringResource(R.string.update_os)
+        else stringResource(R.string.update_app, BuildConfig.VERSION_NAME)
     )
-    OutlinedButton(onClick = onRetry) { Text("Проверить снова") }
+    OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.action_check_again)) }
 }
 
 @Composable
 fun OfflineScreen(serverUnverified: Boolean, onRetry: () -> Unit) = Page {
-    Title(if (serverUnverified) "Не удалось проверить сервер" else "Нет связи с сервером")
-    if (serverUnverified) Body("Соединение не прошло проверку подлинности сервера. Попробуйте позже или в другой сети.")
-    Button(onClick = onRetry) { Text("Повторить") }
+    Title(if (serverUnverified) stringResource(R.string.offline_unverified_title) else stringResource(R.string.offline_title))
+    if (serverUnverified) Body(stringResource(R.string.offline_unverified_body))
+    Button(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
 }
 
 /** S1 §9 «Смена пользователя на устройстве»: no unenroll offered (D15). */
 @Composable
 fun WrongUserScreen(onLogin: () -> Unit, onClose: () -> Unit) = Page {
-    Title("Другой пользователь")
-    Body("Это устройство зарегистрировано за другим пользователем. Обратитесь к администратору.")
-    Button(onClick = onLogin) { Text("Войти снова") }
-    OutlinedButton(onClick = onClose) { Text("Закрыть") }
+    Title(stringResource(R.string.wrong_user_title))
+    Body(stringResource(R.string.wrong_user_body))
+    Button(onClick = onLogin) { Text(stringResource(R.string.action_login_again)) }
+    OutlinedButton(onClick = onClose) { Text(stringResource(R.string.action_close)) }
 }
 
 @Composable
 fun WebViewOutdatedScreen(onRetry: () -> Unit) = Page {
-    Title("Обновите Android System WebView")
-    Body("Для работы приложения нужна более новая версия компонента Android System WebView.")
-    OutlinedButton(onClick = onRetry) { Text("Проверить снова") }
+    Title(stringResource(R.string.webview_title))
+    Body(stringResource(R.string.webview_body))
+    OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.action_check_again)) }
 }
 
 @Composable
 fun LoginScreen(onLogin: () -> Unit) = Page {
-    Title("Вход")
-    Body("Войдите под своей учётной записью мессенджера.")
-    Button(onClick = onLogin) { Text("Войти") }
+    Title(stringResource(R.string.login_title))
+    Body(stringResource(R.string.login_body))
+    Button(onClick = onLogin) { Text(stringResource(R.string.action_login)) }
 }
 
 /** S1 §3.2. No keyboard suggestions; autofill excluded and FLAG_SECURE set on the window by SplashActivity. */
 @Composable
 fun OnboardingScreen(reEnroll: Boolean, busy: Boolean, message: String?, onSubmit: (CharArray) -> Unit) = Page {
     var text by remember { mutableStateOf("") }
-    Title("Регистрация устройства")
-    if (reEnroll) Body("Доступ истёк, нужен новый пароль. Получите его у администратора.")
-    Body("Введите пароль онбординга, выданный администратором.")
+    Title(stringResource(R.string.onboarding_title))
+    if (reEnroll) Body(stringResource(R.string.onboarding_expired))
+    Body(stringResource(R.string.onboarding_body))
     OutlinedTextField(
         value = text,
         onValueChange = { text = it },
-        label = { Text("Пароль онбординга") },
+        label = { Text(stringResource(R.string.onboarding_label)) },
         singleLine = true,
         enabled = !busy,
         visualTransformation = PasswordVisualTransformation(),
@@ -145,5 +147,5 @@ fun OnboardingScreen(reEnroll: Boolean, busy: Boolean, message: String?, onSubmi
     )
     if (message != null) Body(message)
     if (busy) CircularProgressIndicator()
-    else Button(onClick = { onSubmit(text.toCharArray()) }, enabled = text.isNotEmpty()) { Text("Зарегистрировать") }
+    else Button(onClick = { onSubmit(text.toCharArray()) }, enabled = text.isNotEmpty()) { Text(stringResource(R.string.action_register)) }
 }

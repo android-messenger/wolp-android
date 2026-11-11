@@ -107,7 +107,7 @@ class RingService : Service() {
 
     private fun declinedNotification(): Notification = Notification.Builder(this, Notifier.CH_ONGOING)
         .setSmallIcon(R.drawable.ic_notification)
-        .setContentTitle("Звонок отклонён")
+        .setContentTitle(getString(R.string.call_declined))
         .setCategory(Notification.CATEGORY_CALL)
         .build()
 
@@ -164,14 +164,14 @@ class RingService : Service() {
             this, RC_DECLINE, Intent(this, RingService::class.java).setAction(ACTION_DECLINE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val caller = Person.Builder().setName(c.callerName ?: Notifier.INCOMING_CALL).setImportant(true).build()
+        val caller = Person.Builder().setName(c.callerName ?: getString(R.string.call_incoming)).setImportant(true).build()
         val publicVersion = Notification.Builder(this, Notifier.CH_RINGING)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(Notifier.INCOMING_CALL) // D16: no name on the lock screen
+            .setContentTitle(getString(R.string.call_incoming)) // D16: no name on the lock screen
             .build()
         return Notification.Builder(this, Notifier.CH_RINGING)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(Notifier.INCOMING_CALL)
+            .setContentTitle(getString(R.string.call_incoming))
             .setStyle(Notification.CallStyle.forIncomingCall(caller, decline, accept))
             .setCategory(Notification.CATEGORY_CALL)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
