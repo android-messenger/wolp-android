@@ -28,6 +28,8 @@
     <string name="unsupported_title">Dispositivo no compatible</string>
     <string name="unsupported_software_keystore">No hay almacenamiento de claves por hardware.</string>
     <string name="unsupported_patch_too_old">La actualización de seguridad de Android es demasiado antigua. Actualiza el sistema.</string>
+    <string name="unsupported_no_screen_lock">Configura un bloqueo de pantalla (PIN, patrón o contraseña) y vuelve a abrir la aplicación.</string>
+    <string name="action_open_security_settings">Abrir ajustes de seguridad</string>
     <string name="update_title">Actualización necesaria</string>
     <string name="update_os">Actualiza el sistema: el parche de seguridad es demasiado antiguo.</string>
     <string name="update_app">Esta versión de la aplicación (%1$s) ya no es compatible. Instala la nueva versión.</string>

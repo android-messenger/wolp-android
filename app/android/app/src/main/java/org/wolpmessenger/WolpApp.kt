@@ -12,6 +12,7 @@ import org.wolpmessenger.push.Fcm
 import org.wolpmessenger.push.NameCache
 import org.wolpmessenger.push.Notifier
 import org.wolpmessenger.push.PushKeys
+import org.wolpmessenger.push.PushRegistrar
 import java.io.File
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustEvent
@@ -52,6 +53,15 @@ class WolpApp : Application() {
                 WebData.markVaultReset(this)
                 PushKeys(this).clear()
                 NameCache(this).clear()
+            }
+            // spec 001 story 2: the library moved the E2EE half under the screen-lock key and replaced the
+            // background key, so the push key and the names cache are unreadable; E2EE data is intact —
+            // do NOT markVaultReset (it wipes the web app's E2EE stores). Register again at once: the event
+            // may come on a return to the foreground, after the web app has already registered this start.
+            TrustEvent.BackgroundKeysReset -> {
+                PushKeys(this).clear()
+                NameCache(this).clear()
+                scope.launch { Log.i(TAG, "push: re-register after BackgroundKeysReset → ${PushRegistrar(this@WolpApp).register()}") }
             }
         }
     }
