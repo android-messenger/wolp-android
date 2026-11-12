@@ -113,7 +113,11 @@ jobs:
             echo "verifyPilotReleaseBuildKind accepted a release without wolp.e2eeRoot"; exit 1; fi
           if ./gradlew --no-daemon -q $WOLP -Pwolp.e2eeRoot=../../p1/stand/devices/pki/stand-root.pem :app:validateWolpConfig; then
             echo "validateWolpConfig accepted wolp.e2eeRoot without wolp.e2eeIssuers"; exit 1; fi
-          SIGN="$SIGN -Pwolp.e2eeRoot=../../p1/stand/devices/pki/stand-root.pem -Pwolp.e2eeIssuers=$(printf 'ab%.0s' {1..32})"
+          # the stand root is refused in a release: its private key is in this repository
+          if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.e2eeRoot=../../p1/stand/devices/pki/stand-root.pem -Pwolp.e2eeIssuers=$(printf 'ab%.0s' {1..32}) :app:verifyPilotReleaseBuildKind; then
+            echo "verifyPilotReleaseBuildKind accepted the stand root as wolp.e2eeRoot"; exit 1; fi
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout /dev/null -out "$RUNNER_TEMP/e2ee-root.pem" -subj "/CN=ci device root" -days 30
+          SIGN="$SIGN -Pwolp.e2eeRoot=$RUNNER_TEMP/e2ee-root.pem -Pwolp.e2eeIssuers=$(printf 'ab%.0s' {1..32})"
           ./gradlew --no-daemon $WOLP $SIGN :app:assembleProductRelease :app:assemblePilotRelease
           # refused: product in the pilot versionCode range; signer not in expectedSigningDigests; stand host
           if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.productVersionCode=10095 :app:verifyProductReleaseBuildKind; then
