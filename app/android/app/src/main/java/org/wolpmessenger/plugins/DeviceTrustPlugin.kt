@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.wolpmessenger.AppConfig
+import org.wolpmessenger.Gateway
 import org.wolpmessenger.WolpApp
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.VaultPurpose
@@ -22,6 +23,7 @@ import org.wolpmessenger.web.BridgeGuard
 import org.wolpmessenger.web.BridgePolicy
 import org.wolpmessenger.web.CallOrigins
 import org.wolpmessenger.web.JsDeviceTrust
+import org.wolpmessenger.web.WebData
 
 /**
  * `DeviceTrust` plugin (S1 §5.1): JS ↔ S2. Every method first checks that this very call came
@@ -131,11 +133,23 @@ class DeviceTrustPlugin : Plugin() {
         e2ee(call, "safetyNumber") { DeviceTrust.e2ee.safetyNumber(peer)?.let { mapOf("digits" to it) } ?: emptyMap() }
     }
 
+    /**
+     * `digits` — the safety number that was on the screen: the mark goes to that key only. When the
+     * peer's key is another one by now, the library refuses with `reverify`.
+     */
     @PluginMethod
     fun e2eeSetVerified(call: PluginCall) {
         val peer = peerOf(call) ?: return
         val verified = call.getBoolean("verified") ?: return call.reject("verified: boolean expected", JsDeviceTrust.INVALID_ARGUMENT)
-        e2ee(call, "setVerified") { DeviceTrust.e2ee.setVerified(peer, verified); emptyMap() }
+        val digits = call.getString("digits")
+        e2ee(call, "setVerified") { DeviceTrust.e2ee.setVerified(peer, verified, digits); emptyMap() }
+    }
+
+    /** The user closed the "key changed" notice; until then `e2eePeerState` keeps saying `keyChanged`. */
+    @PluginMethod
+    fun e2eeKeyChangeSeen(call: PluginCall) {
+        val peer = peerOf(call) ?: return
+        e2ee(call, "keyChangeSeen") { DeviceTrust.e2ee.keyChangeSeen(peer); emptyMap() }
     }
 
     @PluginMethod
@@ -154,6 +168,22 @@ class DeviceTrustPlugin : Plugin() {
         if (!admitted(call)) return
         if (!AppConfig.e2eeEnabled) return call.reject("secret chats are not configured in this build", JsDeviceTrust.UNAVAILABLE)
         e2ee(call, "wipe") { DeviceTrust.e2ee.wipe(); emptyMap() }
+    }
+
+    /**
+     * Sign-out, the last step: ends the Kratos session (best effort) and erases the WebView's cookies
+     * whether or not the server could be reached. Without it a sign-out with no network left the
+     * session cookie in place, and the user was signed in again on the next start.
+     */
+    @PluginMethod
+    fun sessionEnd(call: PluginCall) {
+        if (!admitted(call)) return
+        scope.launch {
+            val ended = runCatching { Gateway.logoutKratos() }.getOrDefault(false)
+            WebData.clearSession()
+            Log.i(WolpApp.TAG, "sessionEnd: cookies erased, the server session ${if (ended) "ended" else "could not be ended"}")
+            call.resolve(JSObject().put("ended", ended))
+        }
     }
 
     /** The origin check and the peer of an `e2ee*` call; null — the call is already answered. */

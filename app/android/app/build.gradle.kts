@@ -29,6 +29,8 @@ import java.io.File
 import java.net.URI
 import java.security.KeyStore
 import java.security.MessageDigest
+import java.security.cert.CertificateException
+import java.security.cert.CertificateFactory
 import java.util.Base64
 import java.util.Properties
 
@@ -52,6 +54,24 @@ val uiHost = prop("wolp.uiHost")?.trim()?.lowercase()
 val uiDist = rootProject.file(prop("wolp.uiDist") ?: "../../../messenger/front/dist-app")
 val e2eeRoot = prop("wolp.e2eeRoot")?.let { rootProject.file(it) }
 val e2eeIssuers = prop("wolp.e2eeIssuers")?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }.orEmpty()
+/** DER (base64) of every certificate in the PEM [files]; a file that is not a certificate gives nothing. */
+fun certificatesIn(files: Iterable<File>): List<String> {
+    val factory = CertificateFactory.getInstance("X.509")
+    val out = ArrayList<String>()
+    for (file in files) {
+        if (!file.isFile) continue
+        try {
+            file.inputStream().use { stream ->
+                for (c in factory.generateCertificates(stream)) out.add(Base64.getEncoder().encodeToString(c.encoded))
+            }
+        } catch (e: CertificateException) {
+            // a key or another PEM object
+        }
+    }
+    return out
+}
+/** Certificates of the stand authorities kept in this repository: their private keys lie next to them. */
+val standCertificates = certificatesIn(rootProject.file("../../p1/stand").walkTopDown().filter { it.extension == "pem" || it.extension == "crt" }.asIterable()).toSet()
 val e2eeRootBase64 = e2eeRoot?.takeIf { it.isFile }?.let { Base64.getEncoder().encodeToString(it.readBytes()) }.orEmpty()
 val minWebViewMajor = prop("wolp.minWebViewMajor")?.toInt() ?: 113
 
@@ -384,6 +404,7 @@ androidComponents {
                     for (h in hosts) if (h == "localhost" || h == "127.0.0.1") add("release build points at the stand host $h")
                     if (fcm == null) add("wolp.googleServices not set: a release build without push (S1 §7.1)")
                     if (e2eeRoot == null || e2eeIssuers.isEmpty()) add("wolp.e2eeRoot / wolp.e2eeIssuers not set: the packaged UI encrypts secret chats and calls through the library only")
+                    else if (certificatesIn(listOf(e2eeRoot)).any { it in standCertificates }) add("wolp.e2eeRoot holds a stand certificate from p1/stand: its private key is in the repository")
                 }
                 check(problems.isEmpty()) { "verify${cap}BuildKind:\n  " + problems.joinToString("\n  ") }
                 logger.lifecycle("verify${cap}BuildKind: OK (${channel.buildKind}, versionCode $vc, dryRun ${channel.dryRun}, signer ${signer?.take(16)}…)")
