@@ -156,3 +156,7 @@ export JAVA_HOME=<JDK 21> ANDROID_HOME=<Android SDK>
 ## Установка на телефон
 
 Для пользователей и администраторов — `android-messenger/docs` → `install/phone.md` (требования к телефону, проверка подписи APK, установка из файла, онбординг).
+
+## Лицензия
+
+AGPL-3.0-or-later, см. [LICENSE](LICENSE).
