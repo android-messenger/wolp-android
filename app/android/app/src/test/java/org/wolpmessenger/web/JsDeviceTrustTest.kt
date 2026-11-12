@@ -17,9 +17,9 @@ import java.time.Instant
 
 class JsDeviceTrustTest {
     @Test fun `only the JS purposes are accepted`() {
-        assertEquals(VaultPurpose.E2EE, JsDeviceTrust.purpose("e2ee"))
         assertEquals(VaultPurpose.E2EE_PLAINTEXT, JsDeviceTrust.purpose("e2ee-plaintext"))
-        listOf("names", "push-key", "E2EE", "e2ee ", "", null).forEach { assertNull("$it", JsDeviceTrust.purpose(it)) }
+        // `e2ee` wrapped the web app's own keys; they live in the library now (specs/002 FR-034)
+        listOf("e2ee", "names", "push-key", "E2EE", "e2ee ", "", null).forEach { assertNull("$it", JsDeviceTrust.purpose(it)) }
     }
 
     @Test fun `base64 round trip and garbage`() {

@@ -16,9 +16,12 @@ object JsDeviceTrust {
     const val VAULT_CORRUPT = "VAULT_CORRUPT"
     const val UNAVAILABLE = "UNAVAILABLE"
 
-    /** The JS whitelist (S1 §5.1): native purposes (`names`, `push-key`) and anything else → null. */
+    /**
+     * The JS whitelist (S1 §5.1): only the stored texts of secret messages. `e2ee` used to wrap the web
+     * app's own keys; the keys live in the library now, and nothing in the web app may wrap or unwrap
+     * with that purpose (wolp-device-trust specs/002, FR-034). Native purposes and anything else → null.
+     */
     fun purpose(s: String?): VaultPurpose? = when (s) {
-        VaultPurpose.E2EE.tag -> VaultPurpose.E2EE
         VaultPurpose.E2EE_PLAINTEXT.tag -> VaultPurpose.E2EE_PLAINTEXT
         else -> null
     }

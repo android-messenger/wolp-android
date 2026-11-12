@@ -2,6 +2,7 @@ package org.wolpmessenger
 
 import android.net.Uri
 import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebView
@@ -27,6 +28,17 @@ class WolpWebChromeClient(bridge: Bridge) : BridgeWebChromeClient(bridge) {
         // S1 §7.0: the system dialog is not "background" — but only until the request is answered
         PushState.hold(PushState.HOLD_PERMISSION, 60_000)
         super.onPermissionRequest(ReleasingRequest(request)) // runtime permissions, then grant(resources) or deny()
+    }
+
+    /**
+     * A resource the page's Content-Security-Policy refused goes to the log in every build — Capacitor
+     * logs the console only in debug, so a release build would hide a broken policy. Such a message
+     * names the blocked address and the directive, never message text.
+     */
+    override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+        val message = consoleMessage.message()
+        if (!BuildConfig.DEBUG && message != null && isPolicyRefusal(message)) Log.w(WolpApp.TAG, "csp: ${message.take(300)}")
+        return super.onConsoleMessage(consoleMessage)
     }
 
     /** Ends the permission hold as soon as Capacitor answers the WebView's request. */
@@ -55,5 +67,7 @@ class WolpWebChromeClient(bridge: Bridge) : BridgeWebChromeClient(bridge) {
 
     private companion object {
         val ALLOWED = setOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE, PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+
+        fun isPolicyRefusal(message: String): Boolean = "Content Security Policy" in message || "Content-Security-Policy" in message
     }
 }

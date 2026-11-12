@@ -21,7 +21,8 @@
 //   wolp.e2eeRoot                        PEM file: root certificate(s) of the device CA of this contour — secret chats
 //                                        accept a peer's key only with a device certificate under it
 //   wolp.e2eeIssuers                     sha256 hex of the public key (SPKI) of each CA that issues device
-//                                        certificates, comma separated. Both unset → the e2ee* bridge calls answer UNAVAILABLE
+//                                        certificates, comma separated. Required for a release build; both unset in a
+//                                        debug build → the e2ee* bridge calls answer UNAVAILABLE
 //   wolp.googleServices                  google-services.json of the Firebase project (S1 §7.1, FCM only). Read at
 //                                        build time into BuildConfig; the file is never committed. Unset → push off
 import java.io.File
@@ -382,6 +383,7 @@ androidComponents {
                     if (expected.isEmpty()) add("wolp.expectedSigningDigests empty: DeviceTrust.init() rejects a non-debuggable app without them")
                     for (h in hosts) if (h == "localhost" || h == "127.0.0.1") add("release build points at the stand host $h")
                     if (fcm == null) add("wolp.googleServices not set: a release build without push (S1 §7.1)")
+                    if (e2eeRoot == null || e2eeIssuers.isEmpty()) add("wolp.e2eeRoot / wolp.e2eeIssuers not set: the packaged UI encrypts secret chats and calls through the library only")
                 }
                 check(problems.isEmpty()) { "verify${cap}BuildKind:\n  " + problems.joinToString("\n  ") }
                 logger.lifecycle("verify${cap}BuildKind: OK (${channel.buildKind}, versionCode $vc, dryRun ${channel.dryRun}, signer ${signer?.take(16)}…)")
