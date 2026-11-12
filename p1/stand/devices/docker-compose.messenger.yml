@@ -1,5 +1,5 @@
-# Live messenger on the devices stand (S1-5 and later): the Hormigas backend as-is — messenger (Quarkus
-# jar built from repos/HormigaMessanger), key-directory (built from HormigasMessenger/hormiga-key-directory),
+# Live messenger on the devices stand (S1-5 and later): the messenger backend as-is — messenger (Quarkus
+# jar built from repos/messanger), key-directory (built from the original key directory repository),
 # Redis, Kafka, MinIO — and the messenger-ui build from repos/messenger/front behind app.<host>.
 # KratosGate of the stand is the IDS (gRPC :9090 / REST :8080). Not webpush, not coturn.
 #
@@ -37,13 +37,13 @@ services:
     user: "${STAND_UID:-1000}:${STAND_GID:-1000}"
     working_dir: /messenger
     command: java -Xmx512M -Xms256M -jar quarkus-run.jar
-    volumes: ["${MESSENGER_APP_DIR:-../../../../HormigaMessanger/target/quarkus-app}:/messenger", "./out:/pki:ro"]
+    volumes: ["${MESSENGER_APP_DIR:-../../../../messanger/target/quarkus-app}:/messenger", "./out:/pki:ro"]
     environment:
       # trusts the stand root for its own calls to MINIO_ENDPOINT (minio-loopback); built by messenger-up.sh
       JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/pki/stand-trust.p12 -Djavax.net.ssl.trustStorePassword=changeit
       DB_HOST: db
       DB_PORT: "5432"
-      DB_NAME: hormiga_messenger
+      DB_NAME: wolp_messenger
       DB_USER: stand
       DB_PASSWORD: stand
       REDIS_HOST: redis
@@ -52,6 +52,7 @@ services:
       MINIO_ACCESS_KEY: stand
       MINIO_SECRET_KEY: stand-minio-secret
       MINIO_BUCKET: messenger-attachments
+      # the variable name is fixed by the backend
       HORMIGA_ADMIN_KEY: stand-messenger-admin-key   # also baked into front4mess (VITE_MESSENGER_ADMIN_KEY)
       IDS_GRPC_HOST: kratosgate
       IDS_GRPC_PORT: "9090"
@@ -70,7 +71,7 @@ services:
     image: wolp-stand/key-directory:local
     environment:
       KD_ADDR: ":8092"
-      KD_DATABASE_URL: postgres://stand:stand@db:5432/hormiga_keys?sslmode=disable
+      KD_DATABASE_URL: postgres://stand:stand@db:5432/wolp_keys?sslmode=disable
       KD_USER_HEADER: X-User-Id
       KD_AUTO_MIGRATE: "true"
       LOG_LEVEL: info

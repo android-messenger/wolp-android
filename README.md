@@ -141,7 +141,7 @@ export JAVA_HOME=<JDK 21> ANDROID_HOME=<Android SDK>
 
 ## Стенд
 
-`p1/stand/devices` — локальный стенд для телефона по USB (`adb reverse`): KratosGate с модулем `devices`, Kratos, Oathkeeper, хост `app` с mTLS; по `messenger-up.sh` — бэкенд Hormigas как есть и сборка `messenger-ui`. Запуск и результаты проверок — [`p1/stand/devices/README.md`](p1/stand/devices/README.md):
+`p1/stand/devices` — локальный стенд для телефона по USB (`adb reverse`): KratosGate с модулем `devices`, Kratos, Oathkeeper, хост `app` с mTLS; по `messenger-up.sh` — бэкенд мессенджера как есть и сборка `messenger-ui`. Запуск и результаты проверок — [`p1/stand/devices/README.md`](p1/stand/devices/README.md):
 
 | Скрипт | Что |
 |---|---|
@@ -151,7 +151,7 @@ export JAVA_HOME=<JDK 21> ANDROID_HOME=<Android SDK>
 | `renew.sh` | короткие сертификаты → регистрация → продление на телефоне |
 | `messenger-up.sh` | режим живого мессенджера (`down` — обратно к пробе) |
 
-Стенд не повторяет прод полностью: каталог ключей на нём — исходный Hormigas без правил `KD_SINGLE_DEVICE` / `KD_APP_ONLY_WRITES`, которые в проде включены.
+Стенд не повторяет прод полностью: каталог ключей на нём — исходный, без правил `KD_SINGLE_DEVICE` / `KD_APP_ONLY_WRITES`, которые в проде включены.
 
 ## Установка на телефон
 
