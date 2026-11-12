@@ -14,6 +14,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // libsignal (secret chats, comes with wolp-device-trust) is published only here
+        maven("https://build-artifacts.signal.org/libraries/maven/") {
+            content { includeGroup("org.signal") }
+        }
     }
 }
 rootProject.name = "wolp-android"

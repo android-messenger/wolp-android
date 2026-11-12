@@ -28,6 +28,10 @@ import org.wolpmessenger.web.JsDeviceTrust
  * through [BridgeGuard] from the main frame of the packaged UI (S1 §5, security/09); the API host,
  * `enroll`, iframes and calls
  * that bypassed the guard get `PERMISSION_DENIED`. No method returns key material.
+ *
+ * Secret chats (wolp-device-trust specs/002, story 4): exactly six `e2ee*` methods over
+ * `DeviceTrust.e2ee`. The keys and the sessions stay in the library; the web app passes text and
+ * envelopes and gets a refusal code from the library's closed list.
  */
 @CapacitorPlugin(name = "DeviceTrust")
 class DeviceTrustPlugin : Plugin() {
@@ -94,6 +98,76 @@ class DeviceTrustPlugin : Plugin() {
                 mapOf("data" to JsDeviceTrust.encode(plain))
             } finally {
                 plain.fill(0)
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- secret chats
+
+    @PluginMethod
+    fun e2eeEncrypt(call: PluginCall) {
+        val peer = peerOf(call) ?: return
+        val text = call.getString("text") ?: return call.reject("text expected", JsDeviceTrust.INVALID_ARGUMENT)
+        e2ee(call, "encrypt") { mapOf("envelope" to DeviceTrust.e2ee.encrypt(peer, text)) }
+    }
+
+    @PluginMethod
+    fun e2eeDecrypt(call: PluginCall) {
+        val peer = peerOf(call) ?: return
+        val envelope = call.getString("envelope") ?: return call.reject("envelope expected", JsDeviceTrust.INVALID_ARGUMENT)
+        e2ee(call, "decrypt") { mapOf("text" to DeviceTrust.e2ee.decrypt(peer, envelope)) }
+    }
+
+    @PluginMethod
+    fun e2eePeerState(call: PluginCall) {
+        val peer = peerOf(call) ?: return
+        e2ee(call, "peerState") { JsDeviceTrust.peerState(DeviceTrust.e2ee.peerState(peer)) }
+    }
+
+    /** `{digits}` — 60 digits; no field while no key of the peer is accepted. */
+    @PluginMethod
+    fun e2eeSafetyNumber(call: PluginCall) {
+        val peer = peerOf(call) ?: return
+        e2ee(call, "safetyNumber") { DeviceTrust.e2ee.safetyNumber(peer)?.let { mapOf("digits" to it) } ?: emptyMap() }
+    }
+
+    @PluginMethod
+    fun e2eeSetVerified(call: PluginCall) {
+        val peer = peerOf(call) ?: return
+        val verified = call.getBoolean("verified") ?: return call.reject("verified: boolean expected", JsDeviceTrust.INVALID_ARGUMENT)
+        e2ee(call, "setVerified") { DeviceTrust.e2ee.setVerified(peer, verified); emptyMap() }
+    }
+
+    @PluginMethod
+    fun e2eeResetSession(call: PluginCall) {
+        val peer = peerOf(call) ?: return
+        e2ee(call, "resetSession") { DeviceTrust.e2ee.resetSession(peer); emptyMap() }
+    }
+
+    /** The origin check and the peer of an `e2ee*` call; null — the call is already answered. */
+    private fun peerOf(call: PluginCall): String? {
+        if (!admitted(call)) return null
+        if (!AppConfig.e2eeEnabled) {
+            call.reject("secret chats are not configured in this build", JsDeviceTrust.UNAVAILABLE)
+            return null
+        }
+        return JsDeviceTrust.peer(call.getString("peer")).also {
+            if (it == null) call.reject("peer: account id expected", JsDeviceTrust.INVALID_ARGUMENT)
+        }
+    }
+
+    /** The library's calls are suspend and main-safe; the log gets the operation and the code, never text or a peer. */
+    private fun e2ee(call: PluginCall, op: String, block: suspend () -> Map<String, Any>) {
+        scope.launch {
+            try {
+                val r = block()
+                call.resolve(JSObject().apply { r.forEach { (k, v) -> put(k, v) } })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val code = JsDeviceTrust.e2eeErrorCode(e)
+                Log.w(WolpApp.TAG, "DeviceTrust.e2ee $op refused: $code")
+                call.reject("e2ee $op refused", code)
             }
         }
     }

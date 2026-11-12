@@ -18,12 +18,17 @@
 //   wolp.expectedSigningDigests          sha256 hex of the release signing certificate(s), comma separated
 //   wolp.signing.{storeFile,storePassword,keyAlias,keyPassword}
 //   wolp.productVersionCode / wolp.pilotVersionCode, wolp.minWebViewMajor
+//   wolp.e2eeRoot                        PEM file: root certificate(s) of the device CA of this contour — secret chats
+//                                        accept a peer's key only with a device certificate under it
+//   wolp.e2eeIssuers                     sha256 hex of the public key (SPKI) of each CA that issues device
+//                                        certificates, comma separated. Both unset → the e2ee* bridge calls answer UNAVAILABLE
 //   wolp.googleServices                  google-services.json of the Firebase project (S1 §7.1, FCM only). Read at
 //                                        build time into BuildConfig; the file is never committed. Unset → push off
 import java.io.File
 import java.net.URI
 import java.security.KeyStore
 import java.security.MessageDigest
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -44,6 +49,9 @@ val serverPins = prop("wolp.serverPins")?.split(',')?.map { it.trim() }?.filter 
 val extraTrustAnchor = prop("wolp.extraTrustAnchor")?.let { rootProject.file(it) }
 val uiHost = prop("wolp.uiHost")?.trim()?.lowercase()
 val uiDist = rootProject.file(prop("wolp.uiDist") ?: "../../../messenger/front/dist-app")
+val e2eeRoot = prop("wolp.e2eeRoot")?.let { rootProject.file(it) }
+val e2eeIssuers = prop("wolp.e2eeIssuers")?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }.orEmpty()
+val e2eeRootBase64 = e2eeRoot?.takeIf { it.isFile }?.let { Base64.getEncoder().encodeToString(it.readBytes()) }.orEmpty()
 val minWebViewMajor = prop("wolp.minWebViewMajor")?.toInt() ?: 113
 
 /** FCM options from google-services.json (no google-services plugin: only messaging is initialised, S1 §7.1). */
@@ -75,6 +83,9 @@ fun configProblems(): List<String> = buildList {
     if (serverPins.size < 2 || serverPins.any { !it.startsWith("sha256/") }) add("wolp.serverPins: ≥ 2 values sha256/<base64> (primary + backup)")
     if (extraTrustAnchor != null && !extraTrustAnchor.isFile) add("wolp.extraTrustAnchor: no file $extraTrustAnchor")
     addAll(uiHostProblems())
+    if (e2eeRoot != null && !e2eeRoot.isFile) add("wolp.e2eeRoot: no file $e2eeRoot")
+    if ((e2eeRoot == null) != e2eeIssuers.isEmpty()) add("wolp.e2eeRoot and wolp.e2eeIssuers go together")
+    if (e2eeIssuers.any { !Regex("^[0-9a-f]{64}$").matches(it) }) add("wolp.e2eeIssuers: sha256 of the issuer's public key, 64 hex digits each")
     if (!uiDist.resolve("index.html").isFile) add("wolp.uiDist: no index.html in $uiDist (messenger-ui: VITE_API_ORIGIN=<wolp.appUrl> npm run build:app)")
 }
 
@@ -135,6 +146,9 @@ android {
         buildConfigField("String", "SERVER_PINS", "\"${serverPins.joinToString(",")}\"")
         buildConfigField("String", "EXPECTED_SIGNING_DIGESTS", "\"${expectedDigests.joinToString(",")}\"")
         buildConfigField("int", "MIN_WEBVIEW_MAJOR", minWebViewMajor.toString())
+        // the PEM text goes in as base64: a BuildConfig string cannot hold line breaks
+        buildConfigField("String", "E2EE_ROOT", "\"$e2eeRootBase64\"")
+        buildConfigField("String", "E2EE_ISSUERS", "\"${e2eeIssuers.joinToString(",")}\"")
         buildConfigField("String", "FCM_PROJECT_ID", "\"${fcm?.projectId.orEmpty()}\"")
         buildConfigField("String", "FCM_APP_ID", "\"${fcm?.appId.orEmpty()}\"")
         buildConfigField("String", "FCM_API_KEY", "\"${fcm?.apiKey.orEmpty()}\"")
@@ -169,7 +183,12 @@ android {
         }
     }
     buildTypes {
+        debug {
+            ndk { abiFilters += listOf("arm64-v8a", "x86_64") } // phones and the emulator
+        }
         release {
+            // libsignal adds about 10 MB per ABI; every phone of the project is 64-bit ARM (specs/002 FR-036)
+            ndk { abiFilters += "arm64-v8a" }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -177,11 +196,17 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true // libsignal's AAR demands it (wolp-device-trust docs/API.md §1)
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
     testOptions { unitTests.isReturnDefaultValues = true }
-    packaging { resources.excludes += setOf("META-INF/*.version", "META-INF/*.kotlin_module", "kotlin/**", "DebugProbesKt.bin") }
+    packaging {
+        resources.excludes += setOf("META-INF/*.version", "META-INF/*.kotlin_module", "kotlin/**", "DebugProbesKt.bin")
+        // libsignal: its test library and its desktop builds must not reach the APK (over 200 MB otherwise)
+        jniLibs.excludes += "**/libsignal_jni_testing.so"
+        resources.excludes += setOf("libsignal_jni*.so", "libsignal_jni*.dylib", "signal_jni*.dll")
+    }
 }
 
 kotlin {
@@ -191,6 +216,7 @@ kotlin {
 dependencies {
     implementation(project(":capacitor-android"))
     implementation("org.wolpmessenger:devicetrust") // includeBuild (settings.gradle.kts)
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.core:core-ktx:1.17.0")
