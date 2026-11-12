@@ -29,7 +29,7 @@ import org.wolpmessenger.web.JsDeviceTrust
  * `enroll`, iframes and calls
  * that bypassed the guard get `PERMISSION_DENIED`. No method returns key material.
  *
- * Secret chats (wolp-device-trust specs/002, story 4): exactly six `e2ee*` methods over
+ * Secret chats (wolp-device-trust specs/002, story 4): exactly seven `e2ee*` methods over
  * `DeviceTrust.e2ee`. The keys and the sessions stay in the library; the web app passes text and
  * envelopes and gets a refusal code from the library's closed list.
  */
@@ -142,6 +142,18 @@ class DeviceTrustPlugin : Plugin() {
     fun e2eeResetSession(call: PluginCall) {
         val peer = peerOf(call) ?: return
         e2ee(call, "resetSession") { DeviceTrust.e2ee.resetSession(peer); emptyMap() }
+    }
+
+    /**
+     * Sign-out: the library erases its keys, sessions, remembered peers and marks and removes its key
+     * directory record. Never refuses (a locked screen or an unreachable directory does not hold a
+     * sign-out up); called by the web app while the session is still valid.
+     */
+    @PluginMethod
+    fun e2eeWipe(call: PluginCall) {
+        if (!admitted(call)) return
+        if (!AppConfig.e2eeEnabled) return call.reject("secret chats are not configured in this build", JsDeviceTrust.UNAVAILABLE)
+        e2ee(call, "wipe") { DeviceTrust.e2ee.wipe(); emptyMap() }
     }
 
     /** The origin check and the peer of an `e2ee*` call; null — the call is already answered. */
