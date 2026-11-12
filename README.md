@@ -9,10 +9,10 @@ Android-приложение **Wolp Messenger** (`org.wolpmessenger`): обол�
 | `ARCHITECTURE.md` | решения D1–D19, модель угроз, совместимость C1–C9 |
 | `specs/S1-android-app.md` | спецификация приложения |
 | `specs/S1-plan.md` | план S1-1…S1-9 и ход работ |
-| `security/` | концепция безопасности (не дублируется здесь) |
+| `security/` | концепция безопасности по слоям (не дублируется здесь); оболочка — `07-app-shell.md`, push и звонки — `11-push-calls.md` |
 | `install/phone.md` | установка на телефон |
 
-> Раздел `security/` и `install/` — в PR `docs` #1 (на согласовании).
+> В комментариях кода встречается прежняя нумерация раздела: `security/09` (UI в APK) — теперь `security/07-app-shell.md`.
 
 ## Структура
 
@@ -36,13 +36,17 @@ docs/adr/               архитектурные решения (ADR-0001 — 
 | `SplashActivity`, `launch/LaunchGate` | порядок проверок при запуске (S1 §3), экраны Compose (`ui/Screens`). Единственный экспортируемый компонент: содержимому своего Intent не доверяет |
 | `launch/LaunchHandoff`, `push/TapActivity` | передача между своими компонентами в памяти процесса: нажатие на уведомление (через неэкспортируемую `TapActivity`), причина возврата из `MainActivity`, допуск `MainActivity` после порядка §3 |
 | `LoginActivity` | вход в Kratos в обычной WebView **без** моста |
-| `MainActivity`, `WolpWebViewClient`, `WolpWebChromeClient` | Capacitor `Bridge`, клиентский сертификат, `X-Device-Deny`, разрешения, «Назад», VaultReset |
+| `MainActivity`, `WolpWebViewClient`, `WolpWebChromeClient` | Capacitor `Bridge` (создаётся только с допуском от `SplashActivity`), клиентский сертификат, `X-Device-Deny`, разрешения, «Назад», VaultReset |
 | `web/BridgeGuard`, `web/BridgePolicy` | защита моста: только главный фрейм упакованного UI (`https://<uiHost>`) |
 | `plugins/DeviceTrustPlugin` | `getState`, `getDeviceInfo`, `vaultWrap`/`vaultUnwrap` |
+| `plugins/FilesPlugin` | сохранение вложения через системный диалог, загрузка закреплённым клиентом S2 |
+| `plugins/PushPlugin`, `push/` | FCM: регистрация токена и ключа нагрузки, расшифровка push, уведомления без текста сообщений, закрытие WebSocket веб-клиента в фоне |
+| `plugins/CallPlugin`, `call/` | звонки: foreground-сервисы звонка и вызова, экран входящего поверх блокировки, маршрут звука, нативный отказ |
+| `plugins/AppSettingsPlugin`, `AppLocale` | язык нативных экранов и уведомлений (английский, испанский) по языку веб-клиента |
 
 ## Как работает приложение
 
-Интерфейс `messenger-ui` **упакован в APK** (app-сборка `messenger-ui`, `security/09-ui-in-apk.md`): Capacitor отдаёт `assets/public` как `https://<uiHost>/` без сети; API, WebSocket и Kratos — на `https://app.<host>` (mTLS, cookie Kratos, CORS для origin UI). `server.url` не используется.
+Интерфейс `messenger-ui` **упакован в APK** (app-сборка `messenger-ui`, `security/07-app-shell.md`): Capacitor отдаёт `assets/public` как `https://<uiHost>/` без сети; API, WebSocket и Kratos — на `https://app.<host>` (mTLS, cookie Kratos, CORS для origin UI). `server.url` не используется.
 
 ```mermaid
 flowchart TD
@@ -58,13 +62,13 @@ flowchart TD
   F -- нет --> O["Onboarding: пароль от админа →<br/>DeviceTrust.enroll() (ключ в TEE, аттестация)"]
   O --> B
   F -- да --> G["ensureFresh() при необходимости"]
-  G --> M["MainActivity: WebView app.#lt;host#gt;<br/>mTLS клиентским сертификатом S2"]
+  G --> M["MainActivity: WebView с UI из APK (https://#lt;uiHost#gt;)<br/>запросы к app.#lt;host#gt; — mTLS клиентским сертификатом S2"]
   M --> W["messenger-ui"]
 ```
 
 ```mermaid
 flowchart LR
-  subgraph WebView["WebView (главный фрейм app.#lt;host#gt;)"]
+  subgraph WebView["WebView (главный фрейм https://#lt;uiHost#gt;, UI из APK)"]
     UI["messenger-ui<br/>platform.ts"]
   end
   UI -- "window.Capacitor.Plugins.DeviceTrust" --> G["BridgeGuard<br/>origin + главный фрейм"]
@@ -72,19 +76,21 @@ flowchart LR
   G --> P["DeviceTrustPlugin<br/>повторная сверка origin по callbackId"]
   P --> V["Vault S2<br/>назначения e2ee / e2ee-plaintext"]
   P --> S["state / deviceInfo S2"]
-  WebView -- "HTTPS + клиентский сертификат" --> N["nginx :app + auth_request<br/>(модуль devices KratosGate)"]
+  WebView -- "fetch / WebSocket к app.#lt;host#gt;:<br/>HTTPS + клиентский сертификат" --> N["nginx :app + auth_request<br/>(модуль devices KratosGate)"]
 ```
 
 - Отказ шлюза (`X-Device-Deny`) с `app.<host>` → `web/DenyPolicy`: проверка по закреплённому каналу S2, при подтверждении — блокировка и очистка.
 - 401 без заголовка на документе → сессию спрашивают у Kratos напрямую; нет — вход.
-- Выход в веб-клиенте (маршрут `login`/`register`) → нативный `LoginActivity`.
+- Выход в веб-клиенте (маршрут `login`/`register`) → нативный `LoginActivity`; если сессии Kratos уже нет, заодно удаляются токен FCM, ключ push и кэш имён.
 - Пользователь сертификата ≠ пользователь сессии → выход из Kratos и экран «Другой пользователь».
+- Нажатие на уведомление и «Принять» на экране звонка идут через неэкспортируемую `TapActivity`; `SplashActivity` экспортирована и из своего Intent ничего не берёт — чужое приложение не может подсунуть ссылку на звонок.
+- `MainActivity`, которую система восстановила после гибели процесса, UI не загружает и возвращается к порядку проверок.
 
-Подробно о мерах защиты — `docs/security/` (`04-gateway-mtls.md`, `07-rasp.md`, `08-e2ee-vault-bridge.md`).
+Подробно о мерах защиты — `android-messenger/docs` → `security/` (`07-app-shell.md`, `06-keystore-vault.md`, `08-rasp.md`, `10-gateway.md`, `11-push-calls.md`).
 
 ### Почему UI упакован в APK (решение владельца 2026-11-09, реализовано)
 
-Интерфейс **упакован в APK**. Причина: код, загруженный с сервера, может вызывать Vault через мост — взлом сервера дал бы чтение E2EE; код внутри APK подписан. Единая кодовая база `messenger-ui`: web-сборка → сервер для браузера, app-сборка → внутрь APK при сборке (`wolp.uiDist`, см. `app/README.md`). Подробности — `docs/security/09-ui-in-apk.md`. ADR-0001 описывает прежнюю конфигурацию (`server.url = https://app.<host>`), которая больше не используется.
+Интерфейс **упакован в APK**. Причина: код, загруженный с сервера, может вызывать Vault через мост — взлом сервера дал бы чтение E2EE; код внутри APK подписан. Единая кодовая база `messenger-ui`: web-сборка → сервер для браузера, app-сборка → внутрь APK при сборке (`wolp.uiDist`, см. `app/README.md`). Подробности — `security/07-app-shell.md`. ADR-0001 описывает прежнюю конфигурацию (`server.url = https://app.<host>`), которая больше не используется.
 
 ## Состояние (план S1)
 
@@ -97,9 +103,13 @@ flowchart LR
 | — | стенд с живым мессенджером | слит (#8) |
 | S1-5 | правки `messenger-ui` + нативный вход по маршруту веб-клиента | слит (#9, `messenger-ui` #1) |
 | — | перенос UI в APK | слит (#11) |
-| S1-6 | звонки | слит (#15) |
-| S1-7 | push (FCM) | слит (#13) |
-| S1-8 | обновления (манифест Ed25519, `PackageInstaller`) и упрочнение | не начато; экран Update — заглушка |
+| — | плагин `Files`: сохранение вложений | слит (#12) |
+| S1-7 | push (FCM) | слит (#13, #14, #24) |
+| S1-6 | звонки | слит (#15, #23) |
+| — | обязательное обновление по минимальной версии шлюза (`X-Device-Min-App-Version`) | слит (#16) |
+| — | язык нативных текстов: английский и испанский | слит (#19, #20) |
+| — | исправления по аудиту 2026-11-12: нажатия только от своих компонентов, допуск `MainActivity` | слит |
+| S1-8 | обновления (манифест Ed25519, `PackageInstaller`) и упрочнение | не начато; экран Update только сообщает о необходимости обновления, установить его из приложения нельзя |
 | S1-9 | регрессия и пилот | не начато |
 
 Проверено на **Galaxy A37** (SM-A376B, Android 16, TEE, без StrongBox) через стенд.
@@ -111,10 +121,13 @@ flowchart LR
 ```bash
 git submodule update --init
 cd app && npm ci && cd android
-./gradlew :app:assembleProductDebug
+export JAVA_HOME=<JDK 21> ANDROID_HOME=<Android SDK>
+../tools/stand-config.sh          # стенд: пишет android/stand.properties (хосты, пины, корень стенда, uiHost)
+(cd ../../../messenger-ui/front && VITE_API_ORIGIN=https://localhost:9444 VITE_TURN_HOST=localhost npm run build:app)
+./gradlew :app:assembleProductDebug -Pwolp.uiDist=../../../messenger-ui/front/dist-app
 ```
 
-Хосты, пины сервера, подпись и версии задаются Gradle-свойствами `wolp.*` — таблица в [`app/README.md`](app/README.md#конфигурация-gradle-свойства-wolp). Для стенда их пишет `app/tools/stand-config.sh`.
+Без свойств `wolp.*` и без app-сборки `messenger-ui` сборка останавливается на `validateWolpConfig`. Хосты, пины сервера, каталог UI, подпись и версии — таблица в [`app/README.md`](app/README.md#конфигурация-gradle-свойства-wolp). `wolp.uiDist` по умолчанию — `../../../messenger/front/dist-app`, то есть клон `messenger-ui` в соседнем каталоге `messenger`; при другом имени каталога путь задаётся явно, как выше.
 
 | Вариант | Назначение |
 |---|---|
@@ -124,7 +137,7 @@ cd app && npm ci && cd android
 
 Перед каждой release-сборкой `verify<Variant>BuildKind` отказывает при неверном типе сборки, `versionCode` вне диапазона, отсутствии или чужой подписи, хосте стенда. Подробно — `app/README.md`.
 
-**CI** (`.github/workflows/app.yml`): debug-сборка и JVM-тесты, обе release-сборки одноразовым ключом, отрицательные проверки `verify*`, урезанная `libwolpdt.so`, отсутствие корня стенда в release. Приватный подмодуль `wolp-device-trust` забирается deploy-ключом (секрет `DEVICE_TRUST_DEPLOY_KEY`) или fine-grained токеном (`DEVICE_TRUST_TOKEN`).
+**CI** (`.github/workflows/app.yml`): debug-сборка, JVM-тесты и Android lint, обе release-сборки одноразовым ключом, отрицательные проверки `verify*` и упаковки UI, урезанная `libwolpdt.so`, отсутствие корня стенда в release. UI в CI — заглушка, настоящий `messenger-ui` там не собирается. Actions закреплены по SHA коммита. Приватный подмодуль `wolp-device-trust` забирается deploy-ключом (секрет `DEVICE_TRUST_DEPLOY_KEY`) или fine-grained токеном (`DEVICE_TRUST_TOKEN`).
 
 ## Стенд
 
@@ -134,8 +147,12 @@ cd app && npm ci && cd android
 |---|---|
 | `up.sh` | PKI стенда, `docker compose`, ожидание готовности |
 | `enroll.sh` | пользователь Kratos → вход → пароль онбординга → регистрация на телефоне |
+| `app-check.sh` | проверки хоста `app` без телефона (синтетическое устройство) |
+| `renew.sh` | короткие сертификаты → регистрация → продление на телефоне |
 | `messenger-up.sh` | режим живого мессенджера (`down` — обратно к пробе) |
+
+Стенд не повторяет прод полностью: каталог ключей на нём — исходный Hormigas без правил `KD_SINGLE_DEVICE` / `KD_APP_ONLY_WRITES`, которые в проде включены.
 
 ## Установка на телефон
 
-Для пользователей и администраторов — `docs/install/phone.md` (требования к телефону, проверка подписи APK, установка из файла, онбординг).
+Для пользователей и администраторов — `android-messenger/docs` → `install/phone.md` (требования к телефону, проверка подписи APK, установка из файла, онбординг).
