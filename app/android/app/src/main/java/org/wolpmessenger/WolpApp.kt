@@ -66,6 +66,11 @@ class WolpApp : Application() {
         }
     }
 
+    /** The Kratos session ended outside the web client's logout (S1 §9): the same push clean-up as on Blocked. */
+    fun clearPush() {
+        scope.launch { wipePush() }
+    }
+
     /** security/11 §3: on Blocked the FCM token goes and nothing push-related stays on the device. */
     private suspend fun wipePush() {
         Notifier(this).cancelAll()

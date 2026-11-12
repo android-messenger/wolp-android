@@ -12,12 +12,11 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import org.wolpmessenger.R
-import org.wolpmessenger.SplashActivity
 
 /**
  * Local notifications for push signals (S1 §7.1). Texts never come from the push: names from the
- * local cache, otherwise a generic text (res/values(-es)/strings.xml, language of the web UI — S1 §5.5). A tap opens SplashActivity (S1 §3 order first), which
- * passes the tap on to MainActivity → `notificationTap`.
+ * local cache, otherwise a generic text (res/values(-es)/strings.xml, language of the web UI — S1 §5.5). A tap opens [TapActivity] (not exported), which
+ * hands it to SplashActivity (S1 §3 order first) → MainActivity → `notificationTap`.
  *
  * A push call rings through RingService (S1-6, §7.3) on the silent `ringing` channel (the service
  * plays the ringtone itself); the insistent `calls` notification is the fallback when the FGS cannot start.
@@ -151,7 +150,7 @@ class Notifier(private val context: Context) {
     private fun tap(t: NotificationTap, requestCode: Int): PendingIntent = PendingIntent.getActivity(
         context,
         requestCode,
-        Intent(context, SplashActivity::class.java).setData(t.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        Intent(context, TapActivity::class.java).setData(t.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 

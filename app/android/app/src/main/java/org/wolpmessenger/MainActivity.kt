@@ -26,6 +26,7 @@ import org.wolpmessenger.devicetrust.api.TrustState
 import org.wolpmessenger.launch.MinVersion
 import org.wolpmessenger.launch.AndroidProbes
 import org.wolpmessenger.launch.LaunchGate
+import org.wolpmessenger.launch.LaunchHandoff
 import org.wolpmessenger.launch.Screen
 import org.wolpmessenger.call.CallService
 import org.wolpmessenger.plugins.AppSettingsPlugin
@@ -46,11 +47,17 @@ import org.wolpmessenger.web.WebData
  * S1-3: whenever the §3 order no longer ends in [Screen.Messenger] (state change, deny, renderer
  * crash, long background) this activity hands over to SplashActivity and finishes; when it still
  * does, the WebView is not reloaded (§3) — certificate changes go through §4.1 instead.
+ *
+ * The Bridge is created only with SplashActivity's clearance ([LaunchHandoff]). An instance the system
+ * restores after the process died, or one started by anything else (the ongoing-call notification after
+ * this activity was destroyed), has none: it creates no Bridge and goes back to the order.
  */
 class MainActivity : BridgeActivity(), WebHost {
     private val gate by lazy { LaunchGate(AndroidProbes(applicationContext)) }
     private var evaluation: Job? = null
     private var leaving = false
+    /** The S1 §3 order cleared this instance: only then a Bridge exists. */
+    private var gated = false
     private var stoppedAt = 0L
     private var lastCertReload = 0L
     private var vaultResetScript: ScriptHandler? = null
@@ -61,7 +68,13 @@ class MainActivity : BridgeActivity(), WebHost {
         unpark = { bridge?.webView?.loadUrl(AppConfig.uiUrl) },
     )
 
+    /** BridgeActivity.onCreate calls this to create the Bridge, which loads the UI at once. */
+    override fun load() {
+        if (gated) super.load()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        gated = LaunchHandoff.takeClearance()
         config = CapConfig.Builder(this)
             // security/09: the UI comes from the APK (assets/public) as https://<uiHost>/, no server.url
             .setHostname(AppConfig.uiHost)
@@ -77,7 +90,13 @@ class MainActivity : BridgeActivity(), WebHost {
         registerPlugin(PushPlugin::class.java)        // S1 §5.2, §7.0
         registerPlugin(CallPlugin::class.java)        // S1 §5.3, §4.5
         registerPlugin(AppSettingsPlugin::class.java) // S1 §5.5: language of native texts
-        super.onCreate(savedInstanceState)
+        // not cleared: no saved state either — nothing of the previous instance is restored
+        super.onCreate(if (gated) savedInstanceState else null)
+        if (!gated) {
+            Log.i(WolpApp.TAG, "messenger started without the launch order: back to it")
+            leave()
+            return
+        }
         // Installed synchronously after Bridge.create(): the first load's callbacks arrive later on the main looper.
         bridge.webViewClient = WolpWebViewClient(bridge, this)
         // S1 §4.5 (P1-h): with Capacitor's KeepRunning (default true) Bridge.onPause never calls
@@ -119,12 +138,17 @@ class MainActivity : BridgeActivity(), WebHost {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        deliverTap(intent)
+        LaunchHandoff.takeClearance() // SplashActivity cleared a start that reached this instance: used up
+        if (gated) deliverTap(intent)
     }
 
     override fun onDestroy() {
-        background.detach()
-        CallService.webViewGone(this) // §4.5: without Call.ended() within 10 s the call service stops itself
+        if (gated) {
+            background.detach()
+            CallService.webViewGone(this) // §4.5: without Call.ended() within 10 s the call service stops itself
+            // re-created in place (a configuration change in the same process): the order has been passed
+            if (isChangingConfigurations && !leaving) LaunchHandoff.clearMessenger()
+        }
         super.onDestroy()
     }
 
@@ -136,12 +160,13 @@ class MainActivity : BridgeActivity(), WebHost {
     }
 
     override fun onStart() {
-        background.mainStarted() // before super: ProcessLifecycleOwner's ON_START follows our onStart
+        if (gated) background.mainStarted() // before super: ProcessLifecycleOwner's ON_START follows our onStart
         super.onStart()
     }
 
     override fun onStop() {
         super.onStop()
+        if (!gated) return
         background.mainStopped()
         stoppedAt = SystemClock.elapsedRealtime()
     }
@@ -170,9 +195,8 @@ class MainActivity : BridgeActivity(), WebHost {
     private fun leave(reason: String? = null) {
         if (leaving) return
         leaving = true
-        startActivity(Intent(this, SplashActivity::class.java).apply {
-            if (reason != null) putExtra(SplashActivity.EXTRA_REASON, reason)
-        })
+        if (reason != null) LaunchHandoff.offerReason(reason) // not an Intent extra: SplashActivity is exported
+        startActivity(Intent(this, SplashActivity::class.java))
         finish()
     }
 
@@ -234,6 +258,9 @@ class MainActivity : BridgeActivity(), WebHost {
                 bridge.webView.loadUrl(AppConfig.uiUrl)
             } else {
                 WebView.clearClientCertPreferences(null)
+                // the session is gone without the web client's own logout (which calls Push.unregister first):
+                // no pushes for a user who is no longer signed in, no names or payload key left behind
+                (application as WolpApp).clearPush()
                 leave()
             }
         }

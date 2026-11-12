@@ -3,8 +3,8 @@ package org.wolpmessenger.push
 import android.net.Uri
 
 /**
- * Data of a notification tap, carried as the intent data of SplashActivity → MainActivity
- * (MainActivity is not exported and starts only after the S1 §3 order) → `notificationTap`.
+ * Data of a notification tap: the intent data of [TapActivity] and of MainActivity (neither is exported),
+ * and between them — LaunchHandoff, never the Intent of the exported SplashActivity → `notificationTap`.
  */
 data class NotificationTap(
     val conversationId: String?,
