@@ -21,10 +21,10 @@ import android.os.VibratorManager
 import android.util.Log
 import kotlinx.coroutines.launch
 import org.wolpmessenger.R
-import org.wolpmessenger.SplashActivity
 import org.wolpmessenger.WolpApp
 import org.wolpmessenger.push.NotificationTap
 import org.wolpmessenger.push.Notifier
+import org.wolpmessenger.push.TapActivity
 
 /**
  * S1 §7.3 incoming push call: a short FGS (`phoneCall`, allowed from a high-priority FCM) that loops
@@ -234,9 +234,12 @@ class RingService : Service() {
             context.startService(Intent(context, RingService::class.java).setAction(action))
         }
 
-        /** The deep link MainActivity hands to the web app: `?call=…&caller=…&media=…&accept=1`. */
+        /**
+         * The deep link MainActivity hands to the web app: `?call=…&caller=…&media=…&accept=1`. Through
+         * TapActivity (not exported): `accept` must never be something another app can send.
+         */
         fun acceptIntent(context: Context, c: IncomingCall): Intent =
-            Intent(context, SplashActivity::class.java)
+            Intent(context, TapActivity::class.java)
                 .setData(NotificationTap(null, c.conversationId, c.callerId, c.media, accept = true).toUri())
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

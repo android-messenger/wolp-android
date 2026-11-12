@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- S1 §9. Only the launcher (SplashActivity) is exported; MainActivity starts only after the §3 checks
-     (ADR-0001 п. 3: Capacitor's Bridge loads app.<host> in onCreate). Permissions arrive with the
+<!-- S1 §9. Only the launcher (SplashActivity) is exported, and it trusts nothing in its Intent; MainActivity
+     creates its Bridge only after the §3 checks (ADR-0001 п. 3: the Bridge loads the UI in onCreate; LaunchHandoff). Permissions arrive with the
      features that need them (camera/mic — S1-3, calls — S1-6, push — S1-7, updates — S1-8). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -53,6 +53,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Target of our own notification / call PendingIntents (push/TapActivity): not exported, so a tap —
+             a call deep link with accept=1 included — cannot come from another app. Shows nothing. -->
+        <activity
+            android:name=".push.TapActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+
         <!-- Kratos login on enroll.<host>: plain WebView, no Capacitor bridge (S1 §3.1, plan A6) -->
         <activity
             android:name=".LoginActivity"
@@ -69,7 +78,8 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- S1 §7.3: the only activity shown over the lock screen; no name there (D16), Accept asks for the unlock -->
+        <!-- S1 §7.3: the only activity shown over the lock screen; the caller's name is shown there too (D16 as
+             changed by the owner 2026-11-11), Accept asks for the unlock -->
         <activity
             android:name=".call.IncomingCallActivity"
             android:screenOrientation="portrait"

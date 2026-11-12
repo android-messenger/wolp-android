@@ -22,6 +22,7 @@ import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.EnrollResult
 import org.wolpmessenger.launch.AndroidProbes
 import org.wolpmessenger.launch.LaunchGate
+import org.wolpmessenger.launch.LaunchHandoff
 import org.wolpmessenger.launch.Screen
 import org.wolpmessenger.ui.BlockedScreen
 import org.wolpmessenger.ui.LoginScreen
@@ -37,6 +38,9 @@ import org.wolpmessenger.ui.WrongUserScreen
  * Launcher and the S1 §3 order. app.<host> is never loaded from here: only [Screen.Messenger]
  * starts MainActivity (ADR-0001 п. 3). The order is re-run on every start of this activity, on
  * every S2 state change, after login and after an enrollment attempt.
+ *
+ * Exported (launcher): nothing in its Intent is trusted. A notification tap and MainActivity's hand-over
+ * reason arrive through [LaunchHandoff], which only this app's own components can fill.
  */
 class SplashActivity : ComponentActivity() {
     private val gate by lazy { LaunchGate(AndroidProbes(applicationContext)) }
@@ -84,9 +88,8 @@ class SplashActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // MainActivity hands over with a reason when the order alone would not show the right screen
-        val reason = intent.getStringExtra(EXTRA_REASON)
+        val reason = LaunchHandoff.takeReason() // once: the next start runs the order again
         if (reason != null) {
-            intent.removeExtra(EXTRA_REASON) // once: the next start runs the order again
             when (reason) {
                 // the WebView failed TLS to our host; the order's pinned ping may well pass (S1 §4.3)
                 REASON_SERVER_UNVERIFIED -> return show(Screen.Offline(serverUnverified = true))
@@ -111,7 +114,9 @@ class SplashActivity : ComponentActivity() {
         screen = s
         when (s) {
             Screen.Messenger -> {
-                startActivity(Intent(this, MainActivity::class.java).setData(intent.data))
+                // the clearance is what lets MainActivity load the UI (ADR-0001 п. 3); the tap is ours (TapActivity)
+                LaunchHandoff.clearMessenger()
+                startActivity(Intent(this, MainActivity::class.java).setData(LaunchHandoff.takeTap()?.toUri()))
                 finish()
             }
             // open the login page once by itself; afterwards the button does (no loop on "back")
@@ -134,7 +139,6 @@ class SplashActivity : ComponentActivity() {
     }
 
     companion object {
-        const val EXTRA_REASON = "org.wolpmessenger.REASON"
         const val REASON_SERVER_UNVERIFIED = "server_unverified"
         const val REASON_WRONG_USER = "wrong_user"
     }
