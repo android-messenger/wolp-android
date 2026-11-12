@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Devices stand + live messenger (docker-compose.messenger.yml). Run ./up.sh once first (PKI, signer).
-# Needs: repos/HormigaMessanger/target/quarkus-app (./mvnw package -DskipTests, JDK 25) and the image
-# wolp-stand/key-directory:local (docker build -t wolp-stand/key-directory:local <hormiga-key-directory>).
+# Needs: repos/messanger/target/quarkus-app (./mvnw package -DskipTests, JDK 25) and the image
+# wolp-stand/key-directory:local (docker build -t wolp-stand/key-directory:local <the key directory sources>).
 #   ./messenger-up.sh            — up (front4mess is rebuilt from repos/messenger/front)
 #   ./messenger-up.sh down       — back to the probe: messenger services stopped, nginx/oathkeeper in probe mode
 set -euo pipefail
@@ -16,8 +16,8 @@ if [[ "${1:-}" == down ]]; then
   exit 0
 fi
 
-APP_DIR="${MESSENGER_APP_DIR:-../../../../HormigaMessanger/target/quarkus-app}"
-[[ -f $APP_DIR/quarkus-run.jar ]] || { echo "no $APP_DIR/quarkus-run.jar — build repos/HormigaMessanger first" >&2; exit 1; }
+APP_DIR="${MESSENGER_APP_DIR:-../../../../messanger/target/quarkus-app}"
+[[ -f $APP_DIR/quarkus-run.jar ]] || { echo "no $APP_DIR/quarkus-run.jar — build repos/messanger first (or set MESSENGER_APP_DIR)" >&2; exit 1; }
 docker image inspect wolp-stand/key-directory:local >/dev/null 2>&1 || { echo "no image wolp-stand/key-directory:local" >&2; exit 1; }
 
 # JVM truststore of the messenger: the JDK's CAs + the stand root (its own MinIO calls, minio-loopback)
@@ -30,7 +30,7 @@ if [[ ! -f out/stand-trust.p12 || pki/stand-root.pem -nt out/stand-trust.p12 ]];
 fi
 docker compose up -d db
 until docker compose exec -T db pg_isready -U stand -q; do sleep 1; done
-for db in hormiga_messenger hormiga_keys; do
+for db in wolp_messenger wolp_keys; do
   docker compose exec -T db psql -U stand -d ids -tAc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 \
     || docker compose exec -T db psql -U stand -d ids -qc "CREATE DATABASE $db"
 done

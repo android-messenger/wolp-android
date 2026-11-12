@@ -82,7 +82,7 @@ nginx: `nginx.conf` смонтирован файлом — после прав�
 
 ## Живой мессенджер на стенде (`messenger-up.sh`), 2026-11-09
 
-`./messenger-up.sh` (после `./up.sh`) добавляет к стенду бэкенд Hormigas как есть и сборку `messenger-ui`: `docker-compose.messenger.yml` — `messenger` (jar из `repos/HormigaMessanger/target/quarkus-app`, профиль `%prod`), `keydirectory` (образ `wolp-stand/key-directory:local`, собран из `HormigasMessenger/hormiga-key-directory` — образ в GHCR приватный), Redis, Kafka (KRaft, один узел), MinIO (`bitnamilegacy/minio`: MinIO больше не публикует образы), `front4mess` (сборка `repos/messenger/front`, `BASE=/messenger-ui/`). IDS — KratosGate стенда (gRPC `:9090`, REST `:8080`). Без webpush и coturn. `./messenger-up.sh down` — обратно к пробе.
+`./messenger-up.sh` (после `./up.sh`) добавляет к стенду бэкенд мессенджера как есть и сборку `messenger-ui`: `docker-compose.messenger.yml` — `messenger` (jar из `repos/messanger/target/quarkus-app`, профиль `%prod`), `keydirectory` (образ `wolp-stand/key-directory:local`, собран из исходного репозитория каталога ключей — образ в GHCR приватный), Redis, Kafka (KRaft, один узел), MinIO (`bitnamilegacy/minio`: MinIO больше не публикует образы), `front4mess` (сборка `repos/messenger/front`, `BASE=/messenger-ui/`). IDS — KratosGate стенда (gRPC `:9090`, REST `:8080`). Без webpush и coturn. `./messenger-up.sh down` — обратно к пробе.
 
 | | Режим пробы (по умолчанию) | Режим мессенджера |
 |---|---|---|
