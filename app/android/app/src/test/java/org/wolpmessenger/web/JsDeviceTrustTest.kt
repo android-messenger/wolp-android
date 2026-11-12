@@ -5,6 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.wolpmessenger.devicetrust.api.BlockReason
+import org.wolpmessenger.devicetrust.api.E2eeException
+import org.wolpmessenger.devicetrust.api.E2eeFailure
+import org.wolpmessenger.devicetrust.api.E2eePeerState
+import org.wolpmessenger.devicetrust.api.E2eePeerTrust
 import org.wolpmessenger.devicetrust.api.SecurityLevel
 import org.wolpmessenger.devicetrust.api.TrustState
 import org.wolpmessenger.devicetrust.api.VaultException
@@ -39,6 +43,26 @@ class JsDeviceTrustTest {
         assertEquals("STRONGBOX", JsDeviceTrust.securityLevel(SecurityLevel.STRONGBOX))
         assertNull(JsDeviceTrust.securityLevel(SecurityLevel.SOFTWARE))
         assertNull(JsDeviceTrust.securityLevel(null))
+    }
+
+    @Test fun `a peer is an account id and nothing else`() {
+        assertEquals("56db2baa-bf11-48d3-814c-5c5a2e840973", JsDeviceTrust.peer("56db2baa-bf11-48d3-814c-5c5a2e840973"))
+        listOf(null, "", " ", "a b", "../x", "a/b", "x".repeat(65), "имя").forEach { assertNull("$it", JsDeviceTrust.peer(it)) }
+    }
+
+    @Test fun `secret-chat refusals reach the web app with the library's code`() {
+        // the closed list of specs/002 FR-032: the web app's texts are keyed by these strings
+        assertEquals(
+            listOf("locked", "no_passport", "bad_passport", "reverify", "multi_device", "no_device", "no_network", "duplicate", "undecryptable", "not_enrolled"),
+            E2eeFailure.entries.map { JsDeviceTrust.e2eeErrorCode(E2eeException(it)) },
+        )
+        assertEquals(JsDeviceTrust.UNAVAILABLE, JsDeviceTrust.e2eeErrorCode(IllegalStateException("not configured")))
+    }
+
+    @Test fun `peer state carries the trust code and the change mark`() {
+        assertEquals(mapOf("trust" to "passport", "keyChanged" to false), JsDeviceTrust.peerState(E2eePeerState(E2eePeerTrust.PASSPORT, false)))
+        assertEquals(mapOf("trust" to "reverify", "keyChanged" to true), JsDeviceTrust.peerState(E2eePeerState(E2eePeerTrust.REVERIFY, true)))
+        assertEquals(listOf("unverified", "passport", "verified", "reverify"), E2eePeerTrust.entries.map { it.code })
     }
 
     @Test fun `vault errors map to codes`() {

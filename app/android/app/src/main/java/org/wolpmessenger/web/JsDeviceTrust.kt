@@ -1,5 +1,7 @@
 package org.wolpmessenger.web
 
+import org.wolpmessenger.devicetrust.api.E2eeException
+import org.wolpmessenger.devicetrust.api.E2eePeerState
 import org.wolpmessenger.devicetrust.api.SecurityLevel
 import org.wolpmessenger.devicetrust.api.TrustState
 import org.wolpmessenger.devicetrust.api.VaultException
@@ -44,6 +46,20 @@ object JsDeviceTrust {
         SecurityLevel.STRONGBOX -> "STRONGBOX"
         else -> null
     }
+
+    /** A peer's account id as the key directory takes it; anything else is not a peer. */
+    fun peer(s: String?): String? = s?.takeIf { PEER.matches(it) }
+
+    private val PEER = Regex("^[A-Za-z0-9._-]{1,64}$")
+
+    /** `e2eePeerState()`: `{trust, keyChanged}`; trust — `unverified`, `passport`, `verified`, `reverify`. */
+    fun peerState(s: E2eePeerState): Map<String, Any> = mapOf("trust" to s.trust.code, "keyChanged" to s.keyChanged)
+
+    /**
+     * Error code of a refused secret-chat call: the library's closed list as is (`locked`,
+     * `bad_passport`, … — specs/002 FR-032); anything unexpected is [UNAVAILABLE].
+     */
+    fun e2eeErrorCode(e: Throwable): String = (e as? E2eeException)?.failure?.code ?: UNAVAILABLE
 
     /** Error code for a failed vault call; messages never carry data. */
     fun errorCode(e: Throwable): String = when (e) {

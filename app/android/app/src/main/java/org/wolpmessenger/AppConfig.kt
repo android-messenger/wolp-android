@@ -28,6 +28,15 @@ object AppConfig {
     val expectedSigningDigests: List<String> = BuildConfig.EXPECTED_SIGNING_DIGESTS.split(',').filter { it.isNotEmpty() }
     val buildKind: BuildKind = BuildKind.valueOf(BuildConfig.BUILD_KIND)
 
+    /**
+     * Secret chats: the device CA root(s) of this contour (PEM) and the CAs allowed to issue device
+     * certificates (`wolp.e2eeRoot`, `wolp.e2eeIssuers`). Empty — the library's secret chats are off
+     * and the `e2ee*` bridge calls answer `UNAVAILABLE`.
+     */
+    val e2eeRoots: List<String> = BuildConfig.E2EE_ROOT.takeIf { it.isNotEmpty() }?.let { listOf(String(java.util.Base64.getDecoder().decode(it))) }.orEmpty()
+    val e2eeIssuers: List<String> = BuildConfig.E2EE_ISSUERS.split(',').filter { it.isNotEmpty() }
+    val e2eeEnabled: Boolean = e2eeRoots.isNotEmpty() && e2eeIssuers.isNotEmpty()
+
     /** Router base of the app build (WebRoutes). */
     const val START_PATH = "/"
 
@@ -37,6 +46,8 @@ object AppConfig {
         serverPins = serverPins,
         expectedSigningDigests = expectedSigningDigests,
         cookieProvider = ::kratosCookie,
+        e2eeRoots = e2eeRoots,
+        e2eeIssuers = e2eeIssuers,
         buildKind = buildKind,
         raspDryRun = BuildConfig.RASP_DRY_RUN,
         // A debuggable build would block itself on the first RASP pass (API.md §3). The library

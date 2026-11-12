@@ -108,6 +108,10 @@ jobs:
           if ./gradlew --no-daemon -q $WOLP $SIGN :app:verifyPilotReleaseBuildKind; then
             echo "verifyPilotReleaseBuildKind accepted a release without wolp.googleServices"; exit 1; fi
           SIGN="$SIGN -Pwolp.googleServices=$RUNNER_TEMP/google-services.json"
+          # secret chats: a root without the list of issuers is refused; the release builds carry both
+          if ./gradlew --no-daemon -q $WOLP -Pwolp.e2eeRoot=../../p1/stand/devices/pki/stand-root.pem :app:validateWolpConfig; then
+            echo "validateWolpConfig accepted wolp.e2eeRoot without wolp.e2eeIssuers"; exit 1; fi
+          SIGN="$SIGN -Pwolp.e2eeRoot=../../p1/stand/devices/pki/stand-root.pem -Pwolp.e2eeIssuers=$(printf 'ab%.0s' {1..32})"
           ./gradlew --no-daemon $WOLP $SIGN :app:assembleProductRelease :app:assemblePilotRelease
           # refused: product in the pilot versionCode range; signer not in expectedSigningDigests; stand host
           if ./gradlew --no-daemon -q $WOLP $SIGN -Pwolp.productVersionCode=10095 :app:verifyProductReleaseBuildKind; then
@@ -129,6 +133,11 @@ jobs:
             # libwolpdt.so stripped by the app's NDK (API.md §1)
             unzip -p "$apk" lib/arm64-v8a/libwolpdt.so > "$RUNNER_TEMP/libwolpdt.so"
             file "$RUNNER_TEMP/libwolpdt.so" | tee /dev/stderr | grep -q ', stripped'
+          done
+          for apk in app/build/outputs/apk/*/release/*.apk; do
+            # libsignal: 64-bit ARM only, without its test library and its desktop builds (wolp-device-trust API.md §1)
+            unzip -l "$apk" | grep -q 'lib/arm64-v8a/libsignal_jni.so' || { echo "$apk: no libsignal"; exit 1; }
+            if unzip -l "$apk" | grep -E 'lib/(armeabi-v7a|x86|x86_64)/|libsignal_jni_testing|\.dylib|\.dll'; then echo "$apk: files that must not ship"; exit 1; fi
           done
           # no stand trust anchor outside debug (S1 §4.3); checked on the generated sources, as release
           # resource paths are shortened in the APK
