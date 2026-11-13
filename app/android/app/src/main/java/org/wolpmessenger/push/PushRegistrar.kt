@@ -50,7 +50,10 @@ class PushRegistrar(private val context: Context) {
         return withContext(Dispatchers.IO) {
             try {
                 DeviceTrust.okHttpClient().newCall(req).execute().use { r ->
-                    if (r.isSuccessful) Result.OK.also { Log.i(WolpApp.TAG, "push: registered") }
+                    if (r.isSuccessful) Result.OK.also {
+                        SignedOut.mark(context).clear() // signed in again: pushes are shown, no clean-up is owed (F5, Т3)
+                        Log.i(WolpApp.TAG, "push: registered")
+                    }
                     else Result.FAILED.also { Log.w(WolpApp.TAG, "push: register HTTP ${r.code} ${r.header("X-Device-Deny").orEmpty()}") }
                 }
             } catch (e: IOException) {
@@ -60,10 +63,16 @@ class PushRegistrar(private val context: Context) {
         }
     }
 
-    /** Before logging out of Kratos (S1 §9): the server forgets this device's token, FCM drops it. */
+    /**
+     * Before logging out of Kratos (S1 §9): the server forgets this device's token, FCM drops it. From the
+     * first line on no push is shown (F5, Т1); a token FCM could not drop — no network — is dropped later
+     * by [SignedOut.cleanUp] (F5, Т2).
+     */
     suspend fun unregister() = mutex.withLock {
+        val mark = SignedOut.mark(context)
+        mark.set(tokenDeleted = false)
         val cookie = AppConfig.kratosCookie()
-        withContext(Dispatchers.IO) {
+        val deleted = withContext(Dispatchers.IO) {
             if (cookie != null) {
                 val req = Request.Builder().url(AppConfig.appUrl.trimEnd('/') + PATH).header("Cookie", cookie).delete().build()
                 try {
@@ -74,13 +83,18 @@ class PushRegistrar(private val context: Context) {
             }
             Fcm.deleteToken()
         }
+        if (deleted) mark.cleaned()
         keys.clear()
     }
 
-    private companion object {
+    companion object {
         /** One registration at a time per process (plugin, onNewToken). */
-        val mutex = Mutex()
-        const val PATH = "/firebase-push/tokens"
-        val JSON = "application/json".toMediaType()
+        private val mutex = Mutex()
+
+        /** Runs [block] when no registration or sign-out is in progress. */
+        suspend fun <T> exclusive(block: suspend () -> T): T = mutex.withLock { block() }
+
+        private const val PATH = "/firebase-push/tokens"
+        private val JSON = "application/json".toMediaType()
     }
 }

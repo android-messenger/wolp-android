@@ -48,12 +48,13 @@ object Fcm {
             .getOrNull()
     }
 
-    /** Blocking. Logout, unregister and Blocked (security/11 §3). */
-    fun deleteToken() {
-        if (!ready) return
+    /** Blocking. Logout, unregister and Blocked (security/11 §3). False — the token is still there (no network). */
+    fun deleteToken(): Boolean {
+        if (!ready) return true
         val m = FirebaseMessaging.getInstance()
         m.isAutoInitEnabled = false
-        runCatching { Tasks.await(m.deleteToken(), 30, TimeUnit.SECONDS) }
+        return runCatching { Tasks.await(m.deleteToken(), 30, TimeUnit.SECONDS) }
             .onFailure { Log.w(WolpApp.TAG, "fcm: deleteToken failed: ${it.javaClass.simpleName}") }
+            .isSuccess
     }
 }

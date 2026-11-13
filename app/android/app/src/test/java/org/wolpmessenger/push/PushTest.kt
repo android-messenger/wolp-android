@@ -50,11 +50,18 @@ class PushRulesTest {
     private fun env(type: PushPayload.Type, conv: String? = "c1", sender: String? = "s1", ts: String? = null, id: String? = "e1") =
         PushPayload.Envelope(type, id, conv, "m1", sender, null, ts)
 
-    private fun decide(e: PushPayload.Envelope?, blocked: Boolean = false, fg: String? = null, seen: Boolean = false, server: Instant? = now) =
-        PushRules.decide(blocked, e, { !seen }, fg, server, now)
+    private fun decide(e: PushPayload.Envelope?, blocked: Boolean = false, fg: String? = null, seen: Boolean = false, server: Instant? = now, signedOut: Boolean = false) =
+        PushRules.decide(blocked, e, { !seen }, fg, server, now, signedOut)
 
     @Test fun blockedDropsFirst() = assertEquals(PushAction.Drop, decide(env(PushPayload.Type.MSG), blocked = true))
     @Test fun undecryptableIsGeneric() = assertEquals(PushAction.Generic, decide(null))
+    /** Docs F5, Т1: after a sign-out nothing is shown — not a message, not a call, not the notification without details. */
+    @Test fun signedOutDropsEverything() {
+        assertEquals(PushAction.Drop, decide(null, signedOut = true))
+        assertEquals(PushAction.Drop, decide(env(PushPayload.Type.MSG), signedOut = true))
+        assertEquals(PushAction.Drop, decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:59:59Z"), signedOut = true))
+        assertEquals(PushAction.Drop, decide(env(PushPayload.Type.CALL_CANCEL), signedOut = true))
+    }
     @Test fun duplicateDropped() = assertEquals(PushAction.Drop, decide(env(PushPayload.Type.MSG), seen = true))
     @Test fun message() = assertEquals(PushAction.Message("c1", "s1"), decide(env(PushPayload.Type.MSG)))
     @Test fun openConversationSuppressed() = assertEquals(PushAction.Drop, decide(env(PushPayload.Type.MSG), fg = "c1"))
@@ -74,6 +81,41 @@ class PushRulesTest {
         assertEquals(PushAction.Drop, decide(env(PushPayload.Type.CALL, ts = "2026-11-10T11:58:40Z"), server = null))
         // unparsable ts → not dropped (the server already shortened the TTL)
         assertFalse(PushRules.callExpired("garbage", now, now))
+    }
+}
+
+/** Docs F5, part 1: the mark a sign-out leaves. */
+class SignedOutMarkTest {
+    @get:Rule val tmp = TemporaryFolder()
+    private fun mark() = SignedOutMark(java.io.File(tmp.root, "push-signed-out")) // a new object = a restart of the app
+
+    @Test fun noMarkUntilSignOut() {
+        assertFalse(mark().signedOut)
+        assertFalse(mark().cleanupPending)
+    }
+
+    @Test fun signOutWithoutNetworkOwesTheCleanUpAcrossRestarts() {
+        mark().set(tokenDeleted = false)
+        assertTrue(mark().signedOut)
+        assertTrue(mark().cleanupPending)
+        mark().cleaned()
+        assertTrue("still signed out: pushes stay hidden", mark().signedOut)
+        assertFalse(mark().cleanupPending)
+    }
+
+    @Test fun signOutWithNetworkOwesNothing() {
+        mark().set(tokenDeleted = true)
+        assertTrue(mark().signedOut)
+        assertFalse(mark().cleanupPending)
+    }
+
+    @Test fun signInCancelsTheCleanUp() {
+        mark().set(tokenDeleted = false)
+        mark().clear()                 // a successful push registration
+        assertFalse(mark().signedOut)
+        assertFalse(mark().cleanupPending)
+        mark().cleaned()               // a clean-up that finished late must not bring the mark back
+        assertFalse(mark().signedOut)
     }
 }
 
