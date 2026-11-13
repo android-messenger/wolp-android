@@ -17,8 +17,9 @@ object JsDeviceTrust {
     const val UNAVAILABLE = "UNAVAILABLE"
 
     /**
-     * The JS whitelist (S1 §5.1): the stored texts of secret messages, and the key of what the web app
-     * caches on disk — history, attachments, drafts, lists (docs F6, stage 5). `e2ee` used to wrap the web
+     * The JS whitelist (S1 §5.1): the stored texts of secret messages, and the text the web app caches on
+     * disk — history, the send queue, drafts, lists, names; one blob per record, attachments are not
+     * encrypted (docs F6, stage 5). `e2ee` used to wrap the web
      * app's own keys; the keys live in the library now, and nothing in the web app may wrap or unwrap
      * with that purpose (wolp-device-trust specs/002, FR-034). Native purposes and anything else → null.
      */
