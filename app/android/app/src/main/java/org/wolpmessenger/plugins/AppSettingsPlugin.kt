@@ -1,12 +1,14 @@
 package org.wolpmessenger.plugins
 
 import android.util.Log
+import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import org.wolpmessenger.AppConfig
 import org.wolpmessenger.AppLocale
+import org.wolpmessenger.BuildConfig
 import org.wolpmessenger.WolpApp
 import org.wolpmessenger.web.BridgePolicy
 import org.wolpmessenger.web.CallOrigins
@@ -31,5 +33,15 @@ class AppSettingsPlugin : Plugin() {
             ?: return call.reject("lang: one of ${AppLocale.SUPPORTED}", JsDeviceTrust.INVALID_ARGUMENT)
         AppLocale.apply(context, lang)
         call.resolve()
+    }
+
+    /** `{versionName, versionCode}` of this APK — what the web UI shows as the app's version. */
+    @PluginMethod
+    fun getAppInfo(call: PluginCall) {
+        if (!admitted(call)) return
+        call.resolve(JSObject().apply {
+            put("versionName", BuildConfig.VERSION_NAME)
+            put("versionCode", BuildConfig.VERSION_CODE)
+        })
     }
 }
