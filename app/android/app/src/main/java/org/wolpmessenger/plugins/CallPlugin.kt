@@ -94,9 +94,19 @@ class CallPlugin : Plugin(), CallState.Sink {
         call.resolve()
     }
 
+    /** The ringback tone while an outgoing call rings at the other side: `{on: true}` after `started()`, `{on: false}` when answered or dropped. */
+    @PluginMethod
+    fun ringback(call: PluginCall) {
+        if (!admitted(call)) return
+        val on = call.getBoolean("on") ?: return call.reject("on: true | false", JsDeviceTrust.INVALID_ARGUMENT)
+        activity.runOnUiThread { CallService.ringback(on) }
+        call.resolve()
+    }
+
     @PluginMethod
     fun ended(call: PluginCall) {
         if (!admitted(call)) return
+        activity.runOnUiThread { CallService.ringback(false) }
         CallService.stop(context)
         call.resolve()
     }

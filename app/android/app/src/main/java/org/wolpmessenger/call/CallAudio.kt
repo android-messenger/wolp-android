@@ -6,6 +6,7 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -38,6 +39,26 @@ class CallAudio(context: Context, private val onRoute: (AudioRoute) -> Unit) {
     private val deviceListener = AudioManager.OnCommunicationDeviceChangedListener { d ->
         val r = d?.let { routeOf(it.type) } ?: return@OnCommunicationDeviceChangedListener
         if (r != current) { current = r; onRoute(r) }
+    }
+
+    private var tone: ToneGenerator? = null
+
+    /**
+     * The ringback of an outgoing call ("it is ringing there"), played here and not by the web app: once
+     * [start] has taken the audio for the call, the WebView's own player is paused by the system, and it
+     * played the tone only after the call was dropped (owner's report, build 10098). The tone goes to the
+     * call stream, so it follows the call's route — earpiece, loudspeaker, headset.
+     */
+    fun ringback(on: Boolean) {
+        if (!on || !started) {
+            tone?.let { t -> runCatching { t.stopTone() }; runCatching { t.release() } }
+            tone = null
+            return
+        }
+        if (tone != null) return
+        tone = runCatching {
+            ToneGenerator(AudioManager.STREAM_VOICE_CALL, RINGBACK_VOLUME).also { it.startTone(ToneGenerator.TONE_SUP_RINGTONE) }
+        }.onFailure { Log.w(WolpApp.TAG, "call: no ringback tone (${it.javaClass.simpleName})") }.getOrNull()
     }
 
     fun start(video: Boolean) {
@@ -79,6 +100,7 @@ class CallAudio(context: Context, private val onRoute: (AudioRoute) -> Unit) {
 
     fun stop() {
         if (!started) return
+        ringback(false)
         started = false
         runCatching { am.unregisterAudioDeviceCallback(deviceCallback) }
         runCatching { am.removeOnCommunicationDeviceChangedListener(deviceListener) }
@@ -111,6 +133,8 @@ class CallAudio(context: Context, private val onRoute: (AudioRoute) -> Unit) {
     private fun available(): Set<AudioRoute> = am.availableCommunicationDevices.mapNotNull { routeOf(it.type) }.toSet()
 
     companion object {
+        private const val RINGBACK_VOLUME = 80 // of 100, relative to the call volume the user set
+
         fun routeOf(type: Int): AudioRoute? = when (type) {
             AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> AudioRoute.EARPIECE
             AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> AudioRoute.SPEAKER
