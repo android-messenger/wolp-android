@@ -95,27 +95,59 @@ class SignedOutMarkTest {
     }
 
     @Test fun signOutWithoutNetworkOwesTheCleanUpAcrossRestarts() {
-        mark().set(tokenDeleted = false)
+        mark().set(tokenDeleted = false, serverTold = false)
         assertTrue(mark().signedOut)
-        assertTrue(mark().cleanupPending)
-        mark().cleaned()
+        assertTrue(mark().tokenPending)
+        assertTrue(mark().noticePending)
+        mark().tokenDeleted()
         assertTrue("still signed out: pushes stay hidden", mark().signedOut)
+        assertFalse(mark().tokenPending)
+        assertTrue("the two debts are paid apart", mark().noticePending)
+        assertTrue(mark().cleanupPending)
+        mark().serverTold()
+        assertTrue(mark().signedOut)
         assertFalse(mark().cleanupPending)
+    }
+
+    @Test fun theNoticeCanBePaidFirst() {
+        mark().set(tokenDeleted = false, serverTold = false)
+        mark().serverTold()
+        assertTrue(mark().tokenPending)
+        assertFalse(mark().noticePending)
     }
 
     @Test fun signOutWithNetworkOwesNothing() {
-        mark().set(tokenDeleted = true)
+        mark().set(tokenDeleted = true, serverTold = true)
         assertTrue(mark().signedOut)
         assertFalse(mark().cleanupPending)
     }
 
+    @Test fun serverNotToldOwesOnlyTheNotice() {
+        mark().set(tokenDeleted = true, serverTold = false)
+        assertFalse(mark().tokenPending)
+        assertTrue(mark().noticePending)
+    }
+
     @Test fun signInCancelsTheCleanUp() {
-        mark().set(tokenDeleted = false)
+        mark().set(tokenDeleted = false, serverTold = false)
         mark().clear()                 // a successful push registration
         assertFalse(mark().signedOut)
         assertFalse(mark().cleanupPending)
-        mark().cleaned()               // a clean-up that finished late must not bring the mark back
+        mark().tokenDeleted()          // a clean-up that finished late must not bring the mark back
+        mark().serverTold()
         assertFalse(mark().signedOut)
+    }
+
+    @Test fun markOfAnOlderBuildOwesTheToken() {
+        java.io.File(tmp.root, "push-signed-out").writeText("pending")
+        assertTrue(mark().tokenPending)
+        assertFalse(mark().noticePending)
+        mark().tokenDeleted()
+        assertTrue(mark().signedOut)
+        assertFalse(mark().cleanupPending)
+        java.io.File(tmp.root, "push-signed-out").writeText("clean")
+        assertTrue(mark().signedOut)
+        assertFalse(mark().cleanupPending)
     }
 }
 

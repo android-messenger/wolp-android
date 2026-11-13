@@ -66,24 +66,28 @@ class PushRegistrar(private val context: Context) {
     /**
      * Before logging out of Kratos (S1 §9): the server forgets this device's token, FCM drops it. From the
      * first line on no push is shown (F5, Т1); a token FCM could not drop — no network — is dropped later
-     * by [SignedOut.cleanUp] (F5, Т2).
+     * by [SignedOut.cleanUp] (F5, Т2), which also tells the gateway if the server did not take this
+     * request (F5, Ш3).
      */
     suspend fun unregister() = mutex.withLock {
         val mark = SignedOut.mark(context)
-        mark.set(tokenDeleted = false)
+        mark.set(tokenDeleted = false, serverTold = false)
         val cookie = AppConfig.kratosCookie()
         val deleted = withContext(Dispatchers.IO) {
             if (cookie != null) {
                 val req = Request.Builder().url(AppConfig.appUrl.trimEnd('/') + PATH).header("Cookie", cookie).delete().build()
                 try {
-                    DeviceTrust.okHttpClient().newCall(req).execute().use { r -> Log.i(WolpApp.TAG, "push: unregister HTTP ${r.code}") }
+                    DeviceTrust.okHttpClient().newCall(req).execute().use { r ->
+                        Log.i(WolpApp.TAG, "push: unregister HTTP ${r.code}")
+                        if (r.isSuccessful) mark.serverTold()
+                    }
                 } catch (e: IOException) {
                     Log.w(WolpApp.TAG, "push: unregister failed: ${e.javaClass.simpleName}")
                 }
             }
             Fcm.deleteToken()
         }
-        if (deleted) mark.cleaned()
+        if (deleted) mark.tokenDeleted()
         keys.clear()
     }
 
