@@ -58,6 +58,7 @@ class CallService : Service() {
                 peerName = intent.getStringExtra(EXTRA_NAME)
                 foreground()
                 audio?.start(video)
+                audio?.ringback(ringbackWanted) // asked for before the service was up
                 main.removeCallbacks(selfStop)
             }
             ACTION_MEDIA -> {
@@ -78,6 +79,7 @@ class CallService : Service() {
 
     override fun onDestroy() {
         main.removeCallbacks(selfStop)
+        ringbackWanted = false
         audio?.stop()
         audio = null
         updateProximity(null)
@@ -161,6 +163,15 @@ class CallService : Service() {
             private set
 
         val audioOrNull: CallAudio? get() = running?.audio
+
+        /** `Call.ringback()` arrives right after `Call.started()`, before the service runs: kept until it does. Main thread. */
+        private var ringbackWanted = false
+
+        /** The ringback tone of an outgoing call, on or off. Main thread. */
+        fun ringback(on: Boolean) {
+            ringbackWanted = on
+            running?.audio?.ringback(on)
+        }
 
         /** `Call.started()` — the app is in the foreground, so a `microphone` FGS may start. */
         fun start(context: Context, media: String, peerName: String?) {
