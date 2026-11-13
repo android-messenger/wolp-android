@@ -216,7 +216,7 @@ class DeviceTrustPlugin : Plugin() {
 
     private fun purposeOf(call: PluginCall): VaultPurpose? =
         JsDeviceTrust.purpose(call.getString("purpose")).also {
-            if (it == null) call.reject("purpose: e2ee-plaintext expected", JsDeviceTrust.INVALID_ARGUMENT)
+            if (it == null) call.reject("purpose: e2ee-plaintext or chat-cache expected", JsDeviceTrust.INVALID_ARGUMENT)
         }
 
     /** Vault calls are suspend and main-safe (S2 §4); the reply is posted from the main thread. */
