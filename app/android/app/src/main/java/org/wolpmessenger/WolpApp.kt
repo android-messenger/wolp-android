@@ -84,12 +84,14 @@ class WolpApp : Application() {
      */
     fun clearPush() {
         scope.launch {
-            SignedOut.mark(this@WolpApp).set(tokenDeleted = false)
-            if (wipePush()) SignedOut.mark(this@WolpApp).cleaned()
+            // nothing told the server: the gateway is asked to (F5, Ш3)
+            SignedOut.mark(this@WolpApp).set(tokenDeleted = false, serverTold = false)
+            if (wipePush()) SignedOut.mark(this@WolpApp).tokenDeleted()
+            runCatching { SignedOut.cleanUp(this@WolpApp) }
         }
     }
 
-    /** Docs F5, Т2: the FCM token a sign-out without the network left behind — on start, on return, on network. */
+    /** Docs F5, Т2 and Ш3: what a sign-out without the network left behind — on start, on return, on network. */
     fun cleanUpAfterSignOut() {
         scope.launch { runCatching { SignedOut.cleanUp(this@WolpApp) } }
     }
