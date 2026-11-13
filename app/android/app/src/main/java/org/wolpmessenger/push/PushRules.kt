@@ -18,6 +18,7 @@ object PushRules {
 
     /**
      * @param blocked S2 state is Blocked: drop before decrypting
+     * @param signedOut the user signed out and has not registered since (docs F5): nothing is shown
      * @param envelope null = did not decrypt
      * @param firstSeen dedup by eventId (false = already handled)
      * @param foregroundConversation the conversation open on screen (no notification for it)
@@ -30,8 +31,9 @@ object PushRules {
         foregroundConversation: String?,
         serverNow: Instant?,
         deviceNow: Instant,
+        signedOut: Boolean = false,
     ): PushAction {
-        if (blocked) return PushAction.Drop
+        if (blocked || signedOut) return PushAction.Drop
         val e = envelope ?: return PushAction.Generic
         e.eventId?.let { if (!firstSeen(it)) return PushAction.Drop }
         return when (e.type) {

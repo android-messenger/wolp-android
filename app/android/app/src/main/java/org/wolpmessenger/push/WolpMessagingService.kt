@@ -26,7 +26,9 @@ class WolpMessagingService : FirebaseMessagingService() {
         if (!PushPayload.isOurs(data)) return
         // S2 Blocked: drop before touching any key (security/11 §3)
         val blocked = DeviceTrust.state.value is TrustState.Blocked
-        val envelope = if (blocked) null else runBlocking {
+        // signed out: the server may still hold this device's token (docs F5); nothing is decrypted or shown
+        val signedOut = SignedOut.mark(this).signedOut
+        val envelope = if (blocked || signedOut) null else runBlocking {
             withTimeoutOrNull(5_000) {
                 runCatching { PushKeys(this@WolpMessagingService).current() }.getOrNull()?.let { key ->
                     try { PushPayload.open(key, data) } finally { key.fill(0) }
@@ -40,10 +42,11 @@ class WolpMessagingService : FirebaseMessagingService() {
             foregroundConversation = PushState.suppressedConversation(),
             serverNow = DeviceTrust.trustNow(),
             deviceNow = Instant.now(),
+            signedOut = signedOut,
         )
         // stable names: class names are obfuscated by R8 in release builds
         val label = when (action) {
-            PushAction.Drop -> "drop"
+            PushAction.Drop -> if (signedOut) "drop, signed out" else "drop"
             PushAction.Generic -> "generic"
             is PushAction.Message -> "message"
             is PushAction.Call -> "call"

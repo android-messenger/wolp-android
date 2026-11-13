@@ -6,6 +6,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- docs F5: the clean-up after a sign-out without the network runs when the network is back -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- S1 §4.4: getUserMedia on app.<host> only (WolpWebChromeClient); MODIFY_AUDIO_SETTINGS is asked by Capacitor with RECORD_AUDIO -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
