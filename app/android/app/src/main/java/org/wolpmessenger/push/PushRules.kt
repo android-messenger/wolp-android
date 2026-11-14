@@ -37,9 +37,12 @@ object PushRules {
         val e = envelope ?: return PushAction.Generic
         e.eventId?.let { if (!firstSeen(it)) return PushAction.Drop }
         return when (e.type) {
-            PushPayload.Type.MSG ->
+            PushPayload.Type.MSG -> {
+                // the same message already came over the socket (spec 002 §3.3): shown or seen there
+                e.messageId?.let { if (!firstSeen(EventDedup.messageKey(it))) return PushAction.Drop }
                 if (e.conversationId != null && e.conversationId == foregroundConversation) PushAction.Drop
                 else PushAction.Message(e.conversationId, e.senderId)
+            }
             PushPayload.Type.CALL -> {
                 val conv = e.conversationId ?: return PushAction.Drop
                 val caller = e.senderId ?: return PushAction.Drop
@@ -48,6 +51,16 @@ object PushRules {
             PushPayload.Type.CALL_CANCEL -> e.conversationId?.let { PushAction.CancelCall(it) } ?: PushAction.Drop
         }
     }
+
+    /**
+     * Spec 002 §3.3: a chat message the web app got over its socket. A notification is due when the user is
+     * not looking at the app — the page says it is hidden, or the app as a whole is not on screen (the
+     * socket stays open for a moment after leaving, and for the whole of a call or a file choice) — and
+     * this message was not shown already by a push.
+     * @param first the message id was not in the list of handled ones
+     */
+    fun socketMessage(first: Boolean, signedOut: Boolean, uiHidden: Boolean, appInForeground: Boolean): Boolean =
+        first && !signedOut && (uiHidden || !appInForeground)
 
     /** §7.3: a call older than CALL_RING_TIMEOUT − 5 s is dropped; ±3 s with server time, ±30 s without. */
     fun callExpired(ts: String?, serverNow: Instant?, deviceNow: Instant): Boolean {

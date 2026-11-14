@@ -63,6 +63,27 @@ class PushRulesTest {
         assertEquals(PushAction.Drop, decide(env(PushPayload.Type.CALL_CANCEL), signedOut = true))
     }
     @Test fun duplicateDropped() = assertEquals(PushAction.Drop, decide(env(PushPayload.Type.MSG), seen = true))
+
+    /** Spec 002 §3.3: a push of a message that already came over the socket shows nothing — and the other way round. */
+    @Test fun messageAlreadyHandledOverTheSocketIsDropped() {
+        val handled = hashSetOf(EventDedup.messageKey("m1"))               // the socket frame was first
+        val first = { id: String -> handled.add(id) }
+        assertEquals(PushAction.Drop, PushRules.decide(false, env(PushPayload.Type.MSG), first, null, now, now))
+        handled.clear()                                                    // the push is first
+        assertEquals(PushAction.Message("c1", "s1"), PushRules.decide(false, env(PushPayload.Type.MSG), first, null, now, now))
+        assertEquals(true, EventDedup.messageKey("m1") in handled)         // the socket frame that follows finds it
+    }
+
+    @Test fun socketMessageNotification() {
+        // not looking at the app: the page is hidden, or the app has left the screen with the socket still open
+        assertEquals(true, PushRules.socketMessage(first = true, signedOut = false, uiHidden = true, appInForeground = true))
+        assertEquals(true, PushRules.socketMessage(first = true, signedOut = false, uiHidden = false, appInForeground = false))
+        // on screen: the web app shows it itself
+        assertEquals(false, PushRules.socketMessage(first = true, signedOut = false, uiHidden = false, appInForeground = true))
+        // already shown by a push; signed out
+        assertEquals(false, PushRules.socketMessage(first = false, signedOut = false, uiHidden = true, appInForeground = false))
+        assertEquals(false, PushRules.socketMessage(first = true, signedOut = true, uiHidden = true, appInForeground = false))
+    }
     @Test fun message() = assertEquals(PushAction.Message("c1", "s1"), decide(env(PushPayload.Type.MSG)))
     @Test fun openConversationSuppressed() = assertEquals(PushAction.Drop, decide(env(PushPayload.Type.MSG), fg = "c1"))
     @Test fun otherConversationShown() = assertEquals(PushAction.Message("c1", "s1"), decide(env(PushPayload.Type.MSG), fg = "c2"))

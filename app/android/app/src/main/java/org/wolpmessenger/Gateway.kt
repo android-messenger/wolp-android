@@ -53,17 +53,35 @@ object Gateway {
         }
     }
 
-    /** S1 §3.1: Kratos cookie present and `whoami` = 200 on the enroll host. */
-    suspend fun hasSession(): Boolean = withContext(Dispatchers.IO) {
-        val cookie = AppConfig.kratosCookie() ?: return@withContext false
+    /** What `whoami` says about the Kratos session. */
+    enum class Session {
+        ALIVE,
+        /** No cookie, or Kratos answered 401: the user is not signed in. */
+        NONE,
+        /** No answer or another status: the network or the server, not a sign-out. Nothing may be erased on this. */
+        UNKNOWN,
+    }
+
+    /** S1 §3.1: the Kratos session by cookie and `whoami` on the enroll host. */
+    suspend fun session(): Session = withContext(Dispatchers.IO) {
+        val cookie = AppConfig.kratosCookie() ?: return@withContext Session.NONE
         try {
             DeviceTrust.okHttpClient().newCall(
                 Request.Builder().url(AppConfig.enrollUrl + "/.ory/kratos/public/sessions/whoami").header("Cookie", cookie).header("Accept", "application/json").build()
-            ).execute().use { it.code == 200 }
+            ).execute().use {
+                when (it.code) {
+                    200 -> Session.ALIVE
+                    401 -> Session.NONE
+                    else -> Session.UNKNOWN.also { _ -> Log.i(WolpApp.TAG, "whoami: HTTP ${it.code}") }
+                }
+            }
         } catch (e: IOException) {
-            Log.i(WolpApp.TAG, "whoami: $e"); false
+            Log.i(WolpApp.TAG, "whoami: $e"); Session.UNKNOWN
         }
     }
+
+    /** Kratos cookie present and `whoami` = 200. False also when Kratos could not be asked: see [session]. */
+    suspend fun hasSession(): Boolean = session() == Session.ALIVE
 
     /**
      * Kratos browser logout on the enroll host (S1 §9 order, step 2): fetch a logout token with the

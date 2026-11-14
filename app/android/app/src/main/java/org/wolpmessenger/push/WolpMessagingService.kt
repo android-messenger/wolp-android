@@ -11,7 +11,6 @@ import org.wolpmessenger.call.IncomingCall
 import org.wolpmessenger.call.RingService
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustState
-import java.io.File
 import java.time.Instant
 
 /**
@@ -19,7 +18,7 @@ import java.time.Instant
  * callbacks run on a background thread with a time budget, hence runBlocking with timeouts.
  */
 class WolpMessagingService : FirebaseMessagingService() {
-    private val dedup by lazy { EventDedup(File(noBackupFilesDir, "push-events.txt")) }
+    private val dedup by lazy { EventDedup.shared(this) }
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data

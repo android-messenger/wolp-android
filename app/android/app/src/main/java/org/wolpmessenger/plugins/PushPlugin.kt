@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.wolpmessenger.AppConfig
 import org.wolpmessenger.WolpApp
 import org.wolpmessenger.push.JsPush
@@ -22,6 +23,9 @@ import org.wolpmessenger.push.NameCache
 import org.wolpmessenger.push.NotificationTap
 import org.wolpmessenger.push.Notifier
 import org.wolpmessenger.push.PushRegistrar
+import org.wolpmessenger.push.EventDedup
+import org.wolpmessenger.push.PushRules
+import org.wolpmessenger.push.SignedOut
 import org.wolpmessenger.push.PushState
 import org.wolpmessenger.web.BridgePolicy
 import org.wolpmessenger.web.CallOrigins
@@ -115,6 +119,33 @@ class PushPlugin : Plugin() {
         PushState.foregroundConversation = id
         id?.let { Notifier(context).cancelConversation(it) }
         call.resolve()
+    }
+
+    /**
+     * Spec 002 §3.3: the web app got a chat message over its socket. Called for every such message, so the
+     * list of handled messages knows it and a late push of the same message shows nothing. A notification
+     * is shown when the user is not looking at the app ([PushRules.socketMessage]). `hidden` — the page
+     * says it is not visible. Answers `{shown}`.
+     */
+    @PluginMethod
+    fun notifyMessage(call: PluginCall) {
+        if (!admitted(call)) return
+        val conversationId = JsPush.id(call.getString("conversationId"))
+            ?: return call.reject("conversationId expected", JsDeviceTrust.INVALID_ARGUMENT)
+        val messageId = JsPush.id(call.getString("messageId"))
+            ?: return call.reject("messageId expected", JsDeviceTrust.INVALID_ARGUMENT)
+        val senderId = JsPush.id(call.getString("senderId"))
+        val hidden = call.getBoolean("hidden") ?: false
+        scope.launch {
+            val shown = withContext(Dispatchers.IO) {
+                val first = EventDedup.shared(context).firstSeen(EventDedup.messageKey(messageId))
+                val show = PushRules.socketMessage(first, SignedOut.mark(context).signedOut, hidden, PushState.appInForeground)
+                if (show) Notifier(context).message(conversationId, names.name(senderId))
+                Log.i(WolpApp.TAG, "push: socket message, ${if (show) "notification" else if (!first) "already handled" else "on screen"}")
+                show
+            }
+            call.resolve(JSObject().put("shown", shown))
+        }
     }
 
     /** §7.0: the web app has closed its WebSocket after `appBackground`. */
