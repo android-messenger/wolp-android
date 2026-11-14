@@ -79,21 +79,33 @@ object SignedOut {
      * Does what a sign-out could not: deletes the FCM token and tells the gateway. Runs under the
      * registrar's lock and looks at the mark inside it: a sign-in that registered meanwhile has removed
      * the mark, and its new token and key record stay.
+     *
+     * Returns true when the mark stands although the user is signed in again — the registration that
+     * removes it did not go through. Nothing is deleted then; the caller registers (spec 002 §3.4).
+     * While Kratos cannot be asked nothing is done either: a token deleted for a signed-in user means no
+     * notifications until the next successful registration.
      */
-    suspend fun cleanUp(context: Context) = PushRegistrar.exclusive {
+    suspend fun cleanUp(context: Context): Boolean = PushRegistrar.exclusive {
         val mark = mark(context)
+        if (!mark.signedOut) return@exclusive false
+        when (Gateway.session()) {
+            Gateway.Session.ALIVE -> {
+                Log.w(WolpApp.TAG, "signout: the mark stands with a live session — registering for push again")
+                return@exclusive true
+            }
+            Gateway.Session.UNKNOWN -> return@exclusive false
+            Gateway.Session.NONE -> Unit
+        }
         if (mark.tokenPending) {
             val deleted = withContext(Dispatchers.IO) { Fcm.deleteToken() }
             if (deleted) mark.tokenDeleted()
             Log.i(WolpApp.TAG, "signout: push token clean-up ${if (deleted) "done" else "still pending"}")
         }
         if (mark.noticePending) {
-            // somebody is signed in again and is about to register: that replaces the old records, and a
-            // notice now would remove the new ones (F5, Т3)
-            if (Gateway.hasSession()) return@exclusive
             val notice = DeviceTrust.reportSignedOut()
             if (notice.done) mark.serverTold()
             Log.i(WolpApp.TAG, "signout: gateway notice ${notice.name.lowercase()}")
         }
+        false
     }
 }

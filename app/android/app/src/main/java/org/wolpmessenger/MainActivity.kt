@@ -254,14 +254,21 @@ class MainActivity : BridgeActivity(), WebHost {
     override fun onWebLoginRoute() {
         if (leaving) return
         lifecycleScope.launch {
-            if (Gateway.hasSession()) {
-                bridge.webView.loadUrl(AppConfig.uiUrl)
-            } else {
-                WebView.clearClientCertPreferences(null)
-                // the session is gone without the web client's own logout (which calls Push.unregister first):
-                // no pushes for a user who is no longer signed in, no names or payload key left behind
-                (application as WolpApp).clearPush()
-                leave()
+            when (Gateway.session()) {
+                Gateway.Session.ALIVE -> bridge.webView.loadUrl(AppConfig.uiUrl)
+                Gateway.Session.NONE -> {
+                    WebView.clearClientCertPreferences(null)
+                    // the session is gone without the web client's own logout (which calls Push.unregister first):
+                    // no pushes for a user who is no longer signed in, no names or payload key left behind
+                    (application as WolpApp).clearPush()
+                    leave()
+                }
+                // Kratos did not answer: this is not a sign-out. Nothing of push is erased (spec 002 §3.4 —
+                // a network failure here used to stop every notification); the start screen asks again.
+                Gateway.Session.UNKNOWN -> {
+                    Log.i(WolpApp.TAG, "login route, session unknown: push state kept")
+                    leave()
+                }
             }
         }
     }

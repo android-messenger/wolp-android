@@ -19,7 +19,6 @@ import org.wolpmessenger.push.Notifier
 import org.wolpmessenger.push.PushKeys
 import org.wolpmessenger.push.PushRegistrar
 import org.wolpmessenger.push.SignedOut
-import java.io.File
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustEvent
 import org.wolpmessenger.launch.MinVersion
@@ -84,16 +83,29 @@ class WolpApp : Application() {
      */
     fun clearPush() {
         scope.launch {
-            // nothing told the server: the gateway is asked to (F5, Ш3)
-            SignedOut.mark(this@WolpApp).set(tokenDeleted = false, serverTold = false)
-            if (wipePush()) SignedOut.mark(this@WolpApp).tokenDeleted()
+            // under the registrar's lock: a registration of the reloaded web app must not run in between and
+            // then lose its fresh token to this deletion
+            PushRegistrar.exclusive {
+                // nothing told the server: the gateway is asked to (F5, Ш3)
+                SignedOut.mark(this@WolpApp).set(tokenDeleted = false, serverTold = false)
+                PushRegistrar.registered = false
+                if (wipePush()) SignedOut.mark(this@WolpApp).tokenDeleted()
+            }
             runCatching { SignedOut.cleanUp(this@WolpApp) }
         }
     }
 
     /** Docs F5, Т2 and Ш3: what a sign-out without the network left behind — on start, on return, on network. */
     fun cleanUpAfterSignOut() {
-        scope.launch { runCatching { SignedOut.cleanUp(this@WolpApp) } }
+        scope.launch {
+            runCatching {
+                val signedInAgain = SignedOut.cleanUp(this@WolpApp)
+                // Spec 002 §3.4: the registration is repeated until it goes through — the mark stands with a
+                // live session, or no registration has succeeded in this process yet.
+                val owed = signedInAgain || (!PushRegistrar.registered && !SignedOut.mark(this@WolpApp).signedOut && AppConfig.kratosCookie() != null)
+                if (owed) Log.i(TAG, "push: registration repeated → ${PushRegistrar(this@WolpApp).register().name.lowercase()}")
+            }
+        }
     }
 
     private fun watchNetwork() {
@@ -109,7 +121,7 @@ class WolpApp : Application() {
         Notifier(this).cancelAll()
         PushKeys(this).clear()
         NameCache(this).clear()
-        EventDedup(File(noBackupFilesDir, "push-events.txt")).clear()
+        EventDedup.shared(this).clear()
         val deleted = withContext(Dispatchers.IO) { Fcm.deleteToken() }
         Log.i(TAG, "wipe: push keys removed, token ${if (deleted) "removed" else "not removed"}")
         return deleted

@@ -51,6 +51,7 @@ class PushRegistrar(private val context: Context) {
             try {
                 DeviceTrust.okHttpClient().newCall(req).execute().use { r ->
                     if (r.isSuccessful) Result.OK.also {
+                        registered = true
                         SignedOut.mark(context).clear() // signed in again: pushes are shown, no clean-up is owed (F5, Т3)
                         Log.i(WolpApp.TAG, "push: registered")
                     }
@@ -72,6 +73,7 @@ class PushRegistrar(private val context: Context) {
     suspend fun unregister() = mutex.withLock {
         val mark = SignedOut.mark(context)
         mark.set(tokenDeleted = false, serverTold = false)
+        registered = false
         val cookie = AppConfig.kratosCookie()
         val deleted = withContext(Dispatchers.IO) {
             if (cookie != null) {
@@ -92,6 +94,13 @@ class PushRegistrar(private val context: Context) {
     }
 
     companion object {
+        /**
+         * A registration went through in this process. Until it has, the app tries again on every start,
+         * return to the screen and return of the network (spec 002 §3.4): the web app asks once per start,
+         * and one failed request used to mean no notifications at all.
+         */
+        @Volatile var registered = false
+
         /** One registration at a time per process (plugin, onNewToken). */
         private val mutex = Mutex()
 
