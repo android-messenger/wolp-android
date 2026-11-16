@@ -53,6 +53,11 @@ class PushRulesTest {
     private fun decide(e: PushPayload.Envelope?, blocked: Boolean = false, fg: String? = null, seen: Boolean = false, server: Instant? = now, signedOut: Boolean = false) =
         PushRules.decide(blocked, e, { !seen }, fg, server, now, signedOut)
 
+    @Test fun failedRegistrationIsRetriedAFewTimesWithGrowingPauses() {
+        val pauses = (0..5).map { PushRules.registerRetryDelayMs(it) }
+        assertEquals(listOf(5_000L, 20_000L, 60_000L, 300_000L, null, null), pauses)
+    }
+
     @Test fun blockedDropsFirst() = assertEquals(PushAction.Drop, decide(env(PushPayload.Type.MSG), blocked = true))
     @Test fun undecryptableIsGeneric() = assertEquals(PushAction.Generic, decide(null))
     /** Docs F5, Т1: after a sign-out nothing is shown — not a message, not a call, not the notification without details. */

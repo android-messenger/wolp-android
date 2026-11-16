@@ -8,6 +8,8 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -18,6 +20,7 @@ import org.wolpmessenger.push.NameCache
 import org.wolpmessenger.push.Notifier
 import org.wolpmessenger.push.PushKeys
 import org.wolpmessenger.push.PushRegistrar
+import org.wolpmessenger.push.PushRules
 import org.wolpmessenger.push.SignedOut
 import org.wolpmessenger.devicetrust.DeviceTrust
 import org.wolpmessenger.devicetrust.api.TrustEvent
@@ -95,15 +98,29 @@ class WolpApp : Application() {
         }
     }
 
+    /** A pending repeat of a failed registration (spec 002 §3.4); touched only on the main thread. */
+    private var registerRetry: Job? = null
+
     /** Docs F5, Т2 and Ш3: what a sign-out without the network left behind — on start, on return, on network. */
-    fun cleanUpAfterSignOut() {
+    fun cleanUpAfterSignOut() = cleanUpAfterSignOut(0)
+
+    private fun cleanUpAfterSignOut(attempt: Int) {
         scope.launch {
             runCatching {
                 val signedInAgain = SignedOut.cleanUp(this@WolpApp)
                 // Spec 002 §3.4: the registration is repeated until it goes through — the mark stands with a
                 // live session, or no registration has succeeded in this process yet.
                 val owed = signedInAgain || (!PushRegistrar.registered && !SignedOut.mark(this@WolpApp).signedOut && AppConfig.kratosCookie() != null)
-                if (owed) Log.i(TAG, "push: registration repeated → ${PushRegistrar(this@WolpApp).register().name.lowercase()}")
+                if (!owed) return@runCatching
+                val result = PushRegistrar(this@WolpApp).register()
+                Log.i(TAG, "push: registration repeated → ${result.name.lowercase()}")
+                // A failure right after the network came is usual (DNS not ready yet): try again after a pause,
+                // not only on the next start, return or network change. A newer call replaces the pending one.
+                registerRetry?.cancel()
+                registerRetry = null
+                if (result == PushRegistrar.Result.FAILED) PushRules.registerRetryDelayMs(attempt)?.let { pause ->
+                    registerRetry = scope.launch { delay(pause); cleanUpAfterSignOut(attempt + 1) }
+                }
             }
         }
     }
