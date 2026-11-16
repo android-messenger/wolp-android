@@ -59,6 +59,14 @@ object PushRules {
      * this message was not shown already by a push.
      * @param first the message id was not in the list of handled ones
      */
+    /**
+     * Spec 002 §3.4: a registration that failed (no network yet: the network callback comes before DNS works —
+     * A37, session 52) is tried again after these pauses; then the next start, return or network change.
+     * Null — no more tries.
+     */
+    fun registerRetryDelayMs(attempt: Int): Long? = REGISTER_RETRY_MS.getOrNull(attempt)
+    private val REGISTER_RETRY_MS = listOf(5_000L, 20_000L, 60_000L, 300_000L)
+
     fun socketMessage(first: Boolean, signedOut: Boolean, uiHidden: Boolean, appInForeground: Boolean): Boolean =
         first && !signedOut && (uiHidden || !appInForeground)
 
